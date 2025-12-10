@@ -1,0 +1,20 @@
+{
+  "name": "IAOFICIAL",
+  "version": "1.0.0",
+  "description": "Backend con FCM y MySQL",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.9.0",
+    "firebase-admin": "^12.5.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
