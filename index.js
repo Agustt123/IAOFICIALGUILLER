@@ -5,6 +5,8 @@ import fs from "fs";
 import fcmRoutes from "./routes/fcm.routes.js";
 import deviceRoutes from "./routes/device.routes.js";
 import pingRoutes from "./routes/ping.routes.js";
+import imagenesRoutes from "./routes/imagenes.routes.js";
+
 
 
 
@@ -24,6 +26,7 @@ app.use(express.json());
 app.use("/fcm", fcmRoutes);
 app.use("/device", deviceRoutes);
 app.use("/ping", pingRoutes);
+app.use("/imagenes", imagenesRoutes);
 
 app.listen(3000, () => {
     console.log("🚀 LightData FCM API ON - Puerto 3000");
