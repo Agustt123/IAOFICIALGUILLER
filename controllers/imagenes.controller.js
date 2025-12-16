@@ -38,7 +38,7 @@ export const enviarImagenBase64Push = async (req, res) => {
                 body: cuerpo || "Tenés un mensaje con imagen"
             },
             data: {
-                imageBase64 // le mandamos la imagen en data
+                imageBase64: imagenBase64 // le mandamos la imagen en data
             }
         };
 
