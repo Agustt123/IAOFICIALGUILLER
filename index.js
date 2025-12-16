@@ -29,7 +29,7 @@ app.use("/device", deviceRoutes);
 app.use("/ping", pingRoutes);
 app.use("/imagenes", imagenesRoutes);
 
-app.listen(3000, () => {
+app.listen(13001, () => {
     console.log("🚀 LightData FCM API ON - Puerto 3000");
     console.log("→ POST /device/register     (registrar token)");
     console.log("→ POST /fcm/send            (enviar push por token)");
