@@ -38,11 +38,26 @@ export const enviarImagenBase64Push = async (req, res) => {
                 body: cuerpo || "Tenés un mensaje con imagen"
             },
             data: {
+                title: titulo || "Imagen recibida",
+                body: cuerpo || "Tenés un mensaje con imagen",
                 imageBase64: imagenBase64 // le mandamos la imagen en data
             }
         };
 
-        const response = await admin.messaging().send(message);
+        const message2 = {
+            token,
+            data: {
+                title: titulo || "Imagen recibida",
+                body: cuerpo || "Tenés un mensaje con imagen",
+                imageBase64: imagenBase64
+            },
+            android: {
+                priority: "HIGH"
+            }
+        };
+        console.log("message", message2);
+
+        const response = await admin.messaging().send(message2);
 
         return res.json({
             ok: true,
