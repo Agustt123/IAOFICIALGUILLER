@@ -97,11 +97,10 @@ export const enviarResumenCantidadPush = async (req, res) => {
             },
             android: {
                 notification: { imageUrl },
+                priority: "HIGH"
+
             },
-            apns: {
-                payload: { aps: { "mutable-content": 1 } },
-                fcmOptions: { image: imageUrl },
-            },
+
         };
         console.log(message);
 
