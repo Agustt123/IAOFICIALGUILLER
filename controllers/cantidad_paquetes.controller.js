@@ -70,7 +70,7 @@ async function generarImagenResumen({ fecha, cantidad }) {
 export const enviarResumenCantidadPush = async (req, res) => {
     const { token, dia, titulo, cuerpo } = req.body;
 
-    if (!token || !dia) {
+    if (!dia) {
         return res.status(400).json({ ok: false, msg: "Faltan parámetros: token o dia" });
     }
 
@@ -103,6 +103,8 @@ export const enviarResumenCantidadPush = async (req, res) => {
                 fcmOptions: { image: imageUrl },
             },
         };
+        console.log(message);
+
 
         const fcmResponse = await admin.messaging().send(message);
 

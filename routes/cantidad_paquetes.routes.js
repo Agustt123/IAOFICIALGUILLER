@@ -3,6 +3,6 @@ import { enviarResumenCantidadPush } from "../controllers/cantidad_paquetes.cont
 
 const cantidad = Router();
 
-cantidad.post("/", enviarResumenCantidadPush);
+cantidad.post("/", enviarResumenCantidadPush());
 
 export default cantidad;
