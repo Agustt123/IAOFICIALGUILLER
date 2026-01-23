@@ -59,12 +59,14 @@ async function subirImagenSAT({ bufferPng, nombre }) {
         foto: `image/png;base64,${base64}`,
         nombre: String(nombre),
     };
+    console.log(payload);
+
 
     const resp = await axios.post(
         "https://files.lightdata.app/sat/guardarFotosSAT.php",
         payload,
         {
-            timeout: 20000,
+            timeout: 200000,
             headers: { "Content-Type": "application/json" },
             responseType: "text", // devuelve texto con la URL
             transformResponse: (r) => r, // evita que axios intente parsear
