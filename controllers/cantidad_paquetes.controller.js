@@ -8,15 +8,12 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getBaseUrl(req) {
-    // si tenés proxy (nginx/cloudflare), esto ayuda
-    const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-    const host = req.headers["x-forwarded-host"] || req.get("host");
-    return `${protocol}://${host}`;
-}
-
 async function obtenerCantidad(dia) {
-    const { data } = await axios.post("http://dw.lightdata.app/cantidad", { dia }, { timeout: 15000 });
+    const { data } = await axios.post(
+        "http://dw.lightdata.app/cantidad",
+        { dia },
+        { timeout: 15000 }
+    );
 
     if (!data?.ok) {
         throw new Error(`Respuesta inválida de /cantidad: ${JSON.stringify(data)}`);
@@ -56,6 +53,7 @@ async function generarImagenResumen({ fecha, cantidad }) {
     ctx.font = "24px Arial";
     ctx.fillText("Paquetes únicos", 80, 305);
 
+    // IMPORTANTE: guardá con extensión .png
     const fileName = `resumen_${String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-")}_${Date.now()}.png`;
     const outDir = path.join(__dirname, "..", "imagenes");
     await fs.mkdir(outDir, { recursive: true });
@@ -63,33 +61,66 @@ async function generarImagenResumen({ fecha, cantidad }) {
     const outPath = path.join(outDir, fileName);
     await fs.writeFile(outPath, canvas.toBuffer("image/png"));
 
-    return { fileName };
+    return { fileName, outPath };
+}
+
+async function subirImagenSAT({ nombre, outPath }) {
+    const buffer = await fs.readFile(outPath);
+    const base64 = buffer.toString("base64");
+
+    // Tal cual Postman: JSON raw
+    const payload = {
+        foto: `image/png;base64,${base64}`, // <- este prefijo es CLAVE
+        nombre: String(nombre),            // <- ej "1231"
+    };
+
+    const resp = await axios.post(
+        "https://files.lightdata.app/sat/guardarFotosSAT.php",
+        payload,
+        {
+            timeout: 20000,
+            headers: { "Content-Type": "application/json" },
+            responseType: "text", // por las dudas, suele devolver texto plano (la URL)
+        }
+    );
+
+    const data = resp.data;
+
+    // En tu Postman devuelve un string con la URL
+    const url = typeof data === "string" ? data.trim() : (data?.url ?? "").trim();
+
+    if (!url) {
+        throw new Error(`Respuesta inválida de guardarFotosSAT.php: ${JSON.stringify(data)}`);
+    }
+
+    return { url };
 }
 
 // POST /imagenes/cantidad/push
 export const enviarResumenCantidadPush = async (req, res) => {
-    const { token, dia, titulo, cuerpo } = req.body;
+    const { token, dia, titulo, cuerpo, nombre } = req.body;
 
     if (!dia) {
-        return res.status(400).json({ ok: false, msg: "Faltan parámetros: token o dia" });
+        return res.status(400).json({ ok: false, msg: "Faltan parámetros: dia" });
     }
 
     try {
-        // 1) obtener info desde DW
         const { fecha, cantidad } = await obtenerCantidad(dia);
 
-        // 2) generar imagen y URL
-        const { fileName } = await generarImagenResumen({ fecha, cantidad });
-        const imageUrl = `${getBaseUrl(req)}/imagenes/files/${fileName}`;
+        const { fileName, outPath } = await generarImagenResumen({ fecha, cantidad });
 
-        // 3) enviar push con imagenUrl + data
+        // Si querés que el nombre sea "1231" como Postman, mandalo en req.body.nombre.
+        // Si no viene, uso uno basado en el filename sin extensión.
+        const nombreSAT =
+            nombre ?? fileName.replace(/\.[^/.]+$/, ""); // saca ".png"
+
+        const { url: imageUrl } = await subirImagenSAT({ nombre: nombreSAT, outPath });
+
+        // borrar el archivo local
+        await fs.unlink(outPath).catch(() => { });
+
         const message = {
             token,
-            notification: {
-                title: titulo || "Resumen Global",
-                body: cuerpo || `Paquetes: ${cantidad} (${fecha})`,
-                imageUrl,
-            },
             data: {
                 imageUrl,
                 fecha: String(fecha),
@@ -97,23 +128,13 @@ export const enviarResumenCantidadPush = async (req, res) => {
             },
             android: {
                 notification: { imageUrl },
-                priority: "HIGH"
-
+                priority: "HIGH",
             },
-
         };
-        console.log(message);
-
 
         const fcmResponse = await admin.messaging().send(message);
 
-        return res.json({
-            ok: true,
-            fecha,
-            cantidad,
-            imageUrl,
-            fcmResponse,
-        });
+        return res.json({ ok: true, fecha, cantidad, imageUrl, fcmResponse });
     } catch (error) {
         console.error(error);
         return res.status(500).json({
