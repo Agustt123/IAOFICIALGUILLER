@@ -104,11 +104,11 @@ export const enviarResumenCantidadPush = async (req, res) => {
         const message = {
             token,
             // Si querés mostrar notificación:
-            notification: {
-                title: titulo || "Resumen Global",
-                body: cuerpo || `Paquetes: ${cantidad} (${fecha})`,
-                imageUrl,
-            },
+            /*  notification: {
+                  title: titulo || "Resumen Global",
+                  body: cuerpo || `Paquetes: ${cantidad} (${fecha})`,
+                  imageUrl,
+              },*/
             data: {
                 imageUrl,
                 fecha: String(fecha),
