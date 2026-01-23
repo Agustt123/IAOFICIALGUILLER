@@ -1,21 +1,29 @@
 import { db } from "../config/db.js";
+import { deviceStore } from "../uttils/device.store.js";
 
 export const registerDevice = async (req, res) => {
-    const { idUsuario, token, plataforma } = req.body;
+    const { phone, token, plataforma } = req.body;
+    console.log('📥 /device/register BODY:', req.body);
 
-    if (!idUsuario || !token) {
-        return res.status(400).json({ error: "idUsuario y token son requeridos" });
+    if (!phone || !token) {
+        return res.status(400).json({
+            ok: false,
+            error: "phone y token son requeridos",
+        });
     }
 
-    try {
-        const [rows] = await db.query(
-            "INSERT INTO devices (idUsuario, token, plataforma) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE plataforma = VALUES(plataforma)",
-            [idUsuario, token, plataforma || "android"]
-        );
+    deviceStore.tokens.add(token);
 
-        res.json({ success: true, message: "Device registrado", result: rows });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, error: err });
-    }
+    console.log('✅ Token guardado en memoria:', token);
+    console.log('📦 Total tokens:', deviceStore.tokens.size);
+
+    return res.json({ ok: true });
 };
+
+
+export async function obtenerDispositivosActivos() {
+    return [...deviceStore.tokens].map(token => ({ token }));
+}
+
+
+

@@ -9,7 +9,7 @@ import imagenesRoutes from "./routes/imagenes.routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import cantidad from "./routes/cantidad_paquetes.routes.js";
-
+import './uttils/cantidadPaquetes.cron.js';
 
 
 
@@ -38,7 +38,7 @@ app.use("/imagenes", imagenesRoutes);
 app.use("/cantidad-paquetes", cantidad);
 
 app.listen(13001, () => {
-    console.log("🚀 LightData FCM API ON - Puerto 3000");
+    console.log("🚀 LightData FCM API ON - Puerto 13001");
     console.log("→ POST /device/register     (registrar token)");
     console.log("→ POST /fcm/send            (enviar push por token)");
 });

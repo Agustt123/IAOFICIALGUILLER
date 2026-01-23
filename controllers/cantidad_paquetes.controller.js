@@ -142,3 +142,36 @@ export const enviarResumenCantidadPush = async (req, res) => {
         });
     }
 };
+
+
+export async function generarYEnviarResumen({ token, dia }) {
+    console.log(`Generando y enviando resumen para token ${token} y día ${dia}`);
+    // 1) obtener info desde DW
+    const { fecha, cantidad } = await obtenerCantidad(dia);
+
+    // 2) generar imagen EN MEMORIA
+    const bufferPng = generarImagenResumenBuffer({ fecha, cantidad });
+
+    // 3) subir imagen
+    const nombreSAT = `resumen_${fecha}_${Date.now()}`;
+    const imageUrl = await subirImagenSAT({
+        bufferPng,
+        nombre: nombreSAT,
+    });
+
+    // 4) enviar FCM
+    const message = {
+        token,
+        data: {
+            imageUrl,
+            fecha: String(fecha),
+            cantidad: String(cantidad),
+        },
+        android: {
+            priority: "HIGH",
+        },
+    };
+    console.log("FCM message:", message);
+
+    return admin.messaging().send(message);
+}
