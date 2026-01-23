@@ -59,7 +59,7 @@ async function subirImagenSAT({ bufferPng, nombre }) {
         foto: `image/png;base64,${base64}`,
         nombre: String(nombre),
     };
-    console.log(payload);
+    console.log(payload, "payload");
 
 
     const resp = await axios.post(
