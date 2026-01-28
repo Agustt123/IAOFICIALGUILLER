@@ -1,6 +1,26 @@
 import axios from "axios";
 import admin from "firebase-admin";
-import { createCanvas } from "canvas";
+import { createCanvas, registerFont } from "canvas";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// =====================
+// Fuente (evita "cuadritos")
+// =====================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ajustá esta ruta a donde pongas el TTF
+// Recomendado: /assets/fonts/DejaVuSans.ttf
+const FONT_PATH = path.join(__dirname, "../assets/fonts/DejaVuSans.ttf");
+
+// Registrar fuente una sola vez
+try {
+    registerFont(FONT_PATH, { family: "DejaVuSans" });
+    console.log("✅ Fuente registrada:", FONT_PATH);
+} catch (e) {
+    console.error("⚠️ No se pudo registrar la fuente. Se verá mal el texto:", e?.message || e);
+}
 
 async function obtenerCantidad(dia) {
     const { data } = await axios.post(
@@ -32,35 +52,33 @@ function generarImagenResumenBuffer({ fecha, cantidad }) {
     ctx.fillRect(40, 40, width - 80, height - 80);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 36px Arial";
+    ctx.font = 'bold 36px "DejaVuSans"';
     ctx.fillText("Resumen Global", 80, 115);
 
     ctx.fillStyle = "#cbd5e1";
-    ctx.font = "24px Arial";
+    ctx.font = '24px "DejaVuSans"';
     ctx.fillText(`Fecha: ${fecha}`, 80, 165);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 72px Arial";
+    ctx.font = 'bold 72px "DejaVuSans"';
     ctx.fillText(`${cantidad}`, 80, 270);
 
     ctx.fillStyle = "#cbd5e1";
-    ctx.font = "24px Arial";
+    ctx.font = '24px "DejaVuSans"';
     ctx.fillText("Paquetes únicos", 80, 305);
 
-    // PNG EN MEMORIA (sin fs.writeFile)
-    return canvas.toBuffer("image/png");
+    const buf = canvas.toBuffer("image/png");
+    console.log("PNG bytes:", buf.length);
+    return buf;
 }
 
 async function subirImagenSAT({ bufferPng, nombre }) {
     const base64 = bufferPng.toString("base64");
 
-    // TAL CUAL POSTMAN: JSON raw con prefijo image/png;base64,
     const payload = {
         foto: `image/png;base64,${base64}`,
         nombre: String(nombre),
     };
-    console.log(payload, "payload");
-
 
     const resp = await axios.post(
         "https://files.lightdata.app/sat/guardarFotosSAT.php",
@@ -68,8 +86,8 @@ async function subirImagenSAT({ bufferPng, nombre }) {
         {
             timeout: 200000,
             headers: { "Content-Type": "application/json" },
-            responseType: "text", // devuelve texto con la URL
-            transformResponse: (r) => r, // evita que axios intente parsear
+            responseType: "text",
+            transformResponse: (r) => r,
         }
     );
 
@@ -90,27 +108,24 @@ export const enviarResumenCantidadPush = async (req, res) => {
     }
 
     try {
-        // 1) obtener info desde DW
         const { fecha, cantidad } = await obtenerCantidad(dia);
 
-        // 2) generar imagen EN MEMORIA
         const bufferPng = generarImagenResumenBuffer({ fecha, cantidad });
 
-        // 3) subir a SAT y obtener URL (si no te mandan "nombre", genero uno)
+        const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
         const nombreSAT =
-            nombre ?? `resumen_${String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-")}_${Date.now()}`;
+            (nombre && String(nombre)) || `resumen_${safeFecha}_${Date.now()}.png`;
 
         const imageUrl = await subirImagenSAT({ bufferPng, nombre: nombreSAT });
 
-        // 4) enviar push con URL REAL (NO localhost)
         const message = {
             token,
-            // Si querés mostrar notificación:
-            /*  notification: {
-                  title: titulo || "Resumen Global",
-                  body: cuerpo || `Paquetes: ${cantidad} (${fecha})`,
-                  imageUrl,
-              },*/
+            // notification opcional
+            // notification: {
+            //   title: titulo || "Resumen Global",
+            //   body: cuerpo || `Paquetes: ${cantidad} (${fecha})`,
+            //   imageUrl,
+            // },
             data: {
                 imageUrl,
                 fecha: String(fecha),
@@ -143,23 +158,21 @@ export const enviarResumenCantidadPush = async (req, res) => {
     }
 };
 
-
 export async function generarYEnviarResumen({ token, dia }) {
     console.log(`Generando y enviando resumen para token ${token} y día ${dia}`);
-    // 1) obtener info desde DW
+
     const { fecha, cantidad } = await obtenerCantidad(dia);
 
-    // 2) generar imagen EN MEMORIA
     const bufferPng = generarImagenResumenBuffer({ fecha, cantidad });
 
-    // 3) subir imagen
-    const nombreSAT = `resumen_${fecha}_${Date.now()}`;
+    const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
+    const nombreSAT = `resumen_${safeFecha}_${Date.now()}.png`;
+
     const imageUrl = await subirImagenSAT({
         bufferPng,
         nombre: nombreSAT,
     });
 
-    // 4) enviar FCM
     const message = {
         token,
         data: {
@@ -171,6 +184,7 @@ export async function generarYEnviarResumen({ token, dia }) {
             priority: "HIGH",
         },
     };
+
     console.log("FCM message:", message);
 
     return admin.messaging().send(message);
