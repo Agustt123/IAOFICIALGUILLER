@@ -2,8 +2,8 @@ import cron from 'node-cron';
 import { obtenerDispositivosActivos } from '../controllers/device.controller.js';
 import { generarYEnviarResumen } from '../controllers/cantidad_paquetes.controller.js';
 
-cron.schedule('0 * * * *', async () => {
-    // cron.schedule("* * * * *", async () => {
+// cron.schedule('0 * * * *', async () => {
+cron.schedule("* * * * *", async () => {
     try {
         console.log("⏱️ Cron resumen ejecutándose");
 
