@@ -9,7 +9,7 @@ import imagenesRoutes from "./routes/imagenes.routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import cantidad from "./routes/cantidad_paquetes.routes.js";
-//import './uttils/cantidadPaquetes.cron.js';
+import './uttils/cantidadPaquetes.cron.js';
 
 
 
