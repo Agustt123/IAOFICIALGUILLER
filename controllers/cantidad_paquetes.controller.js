@@ -26,7 +26,7 @@ async function obtenerCantidad(dia) {
     const { data } = await axios.post(
         "http://dw.lightdata.app/cantidad",
         { dia },
-        { timeout: 50000 }
+        { timeout: 100000 }
     );
 
     if (!data?.ok) {
