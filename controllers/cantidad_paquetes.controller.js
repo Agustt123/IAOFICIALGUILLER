@@ -19,10 +19,16 @@ try {
     console.error("⚠️ No se pudo registrar la fuente. Se verá mal el texto:", e?.message || e);
 }
 
-async function obtenerCantidad(dia) {
+export async function obtenerCantidad(dia) {
+    // Si no viene dia, usar hoy en YYYY-MM-DD (UTC para evitar desfases por zona horaria)
+    const diaFinal =
+        typeof dia === "string" && dia.trim()
+            ? dia
+            : new Date().toISOString().slice(0, 10);
+
     const { data } = await axios.post(
         "http://dw.lightdata.app/cantidad",
-        { dia },
+        { dia: diaFinal },
         { timeout: 100000 }
     );
 
@@ -37,12 +43,14 @@ async function obtenerCantidad(dia) {
     const cantidadMes = Number(data.cantidadMes ?? 0);
 
     return {
-        fecha: data.fecha ?? dia,
-        mes: data.mes ?? String(dia).slice(0, 7),
+        fecha: data.fecha ?? diaFinal,
+        mes: data.mes ?? String(diaFinal).slice(0, 7),
         cantidadDia,
         cantidadMes,
+        mesNombre: data.nombre
     };
 }
+
 
 function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes }) {
     const width = 900;
