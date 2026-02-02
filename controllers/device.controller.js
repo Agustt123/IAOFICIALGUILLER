@@ -12,12 +12,19 @@ export const registerDevice = async (req, res) => {
         });
     }
 
+    const usuarios = {
+        1144241507: "hola Box",
+        1140880763: "hola Facu",
+        2213056800: "Hola Chris",
+        1123787254: "Hola Agus",
+        1140415803: "Hola Den",
+    }
     deviceStore.tokens.add(token);
 
     console.log('✅ Token guardado en memoria:', token);
     console.log('📦 Total tokens:', deviceStore.tokens.size);
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, saludo: usuarios[phone] });
 };
 
 

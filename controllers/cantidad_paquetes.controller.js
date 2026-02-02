@@ -105,19 +105,16 @@ export const enviarResumenCantidadPush = async (req, res) => {
         // 4) enviar push con URL REAL (NO localhost)
         const message = {
             token,
-            // Si querés mostrar notificación:
-            /*  notification: {
-                  title: titulo || "Resumen Global",
-                  body: cuerpo || `Paquetes: ${cantidad} (${fecha})`,
-                  imageUrl,
-              },*/
+
             data: {
+                type: "RESUMEN_GLOBAL",
                 imageUrl,
                 fecha: String(fecha),
                 cantidad: String(cantidad),
             },
             android: {
                 notification: { imageUrl },
+                channelId: "silent_high",
                 priority: "HIGH",
             },
         };
