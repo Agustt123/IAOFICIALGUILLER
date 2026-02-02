@@ -10,11 +10,8 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ajustá esta ruta a donde pongas el TTF
-// Recomendado: /assets/fonts/DejaVuSans.ttf
 const FONT_PATH = path.join(__dirname, "../assets/fonts/DejaVuSans.ttf");
 
-// Registrar fuente una sola vez
 try {
     registerFont(FONT_PATH, { family: "DejaVuSans" });
     console.log("✅ Fuente registrada:", FONT_PATH);
@@ -33,15 +30,23 @@ async function obtenerCantidad(dia) {
         throw new Error(`Respuesta inválida de /cantidad: ${JSON.stringify(data)}`);
     }
 
+    // Soporta ambos formatos:
+    // - nuevo: { cantidadDia, cantidadMes, mes, fecha }
+    // - viejo: { cantidad }
+    const cantidadDia = Number(data.cantidadDia ?? data.cantidad ?? 0);
+    const cantidadMes = Number(data.cantidadMes ?? 0);
+
     return {
         fecha: data.fecha ?? dia,
-        cantidad: Number(data.cantidad ?? 0),
+        mes: data.mes ?? String(dia).slice(0, 7),
+        cantidadDia,
+        cantidadMes,
     };
 }
 
-function generarImagenResumenBuffer({ fecha, cantidad }) {
+function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes }) {
     const width = 900;
-    const height = 420;
+    const height = 460;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
@@ -58,14 +63,25 @@ function generarImagenResumenBuffer({ fecha, cantidad }) {
     ctx.fillStyle = "#cbd5e1";
     ctx.font = '24px "DejaVuSans"';
     ctx.fillText(`Fecha: ${fecha}`, 80, 165);
+    ctx.fillText(`Mes: ${mes}`, 80, 200);
 
+    // Día
     ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 72px "DejaVuSans"';
-    ctx.fillText(`${cantidad}`, 80, 270);
+    ctx.font = 'bold 64px "DejaVuSans"';
+    ctx.fillText(`${cantidadDia}`, 80, 290);
 
     ctx.fillStyle = "#cbd5e1";
-    ctx.font = '24px "DejaVuSans"';
-    ctx.fillText("Paquetes únicos", 80, 305);
+    ctx.font = '22px "DejaVuSans"';
+    ctx.fillText("Únicos del día", 80, 325);
+
+    // Mes (a la derecha)
+    ctx.fillStyle = "#ffffff";
+    ctx.font = 'bold 48px "DejaVuSans"';
+    ctx.fillText(`${cantidadMes}`, 520, 290);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = '22px "DejaVuSans"';
+    ctx.fillText("Únicos del mes", 520, 325);
 
     const buf = canvas.toBuffer("image/png");
     console.log("PNG bytes:", buf.length);
@@ -106,11 +122,19 @@ export const enviarResumenCantidadPush = async (req, res) => {
     if (!dia) {
         return res.status(400).json({ ok: false, msg: "Faltan parámetros: dia" });
     }
+    if (!token) {
+        return res.status(400).json({ ok: false, msg: "Faltan parámetros: token" });
+    }
 
     try {
-        const { fecha, cantidad } = await obtenerCantidad(dia);
+        const { fecha, mes, cantidadDia, cantidadMes } = await obtenerCantidad(dia);
 
-        const bufferPng = generarImagenResumenBuffer({ fecha, cantidad });
+        const bufferPng = generarImagenResumenBuffer({
+            fecha,
+            mes,
+            cantidadDia,
+            cantidadMes,
+        });
 
         const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
         const nombreSAT =
@@ -123,7 +147,12 @@ export const enviarResumenCantidadPush = async (req, res) => {
             data: {
                 imageUrl,
                 fecha: String(fecha),
-                cantidad: String(cantidad),
+                mes: String(mes),
+                cantidadDia: String(cantidadDia),
+                cantidadMes: String(cantidadMes),
+                // opcional: si querés incluir los textos que te mandan
+                ...(titulo ? { titulo: String(titulo) } : {}),
+                ...(cuerpo ? { cuerpo: String(cuerpo) } : {}),
             },
             android: {
                 notification: { imageUrl },
@@ -139,7 +168,9 @@ export const enviarResumenCantidadPush = async (req, res) => {
         return res.json({
             ok: true,
             fecha,
-            cantidad,
+            mes,
+            cantidadDia,
+            cantidadMes,
             imageUrl,
             fcmResponse,
         });
@@ -156,9 +187,14 @@ export const enviarResumenCantidadPush = async (req, res) => {
 export async function generarYEnviarResumen({ token, dia }) {
     console.log(`Generando y enviando resumen para token ${token} y día ${dia}`);
 
-    const { fecha, cantidad } = await obtenerCantidad(dia);
+    const { fecha, mes, cantidadDia, cantidadMes } = await obtenerCantidad(dia);
 
-    const bufferPng = generarImagenResumenBuffer({ fecha, cantidad });
+    const bufferPng = generarImagenResumenBuffer({
+        fecha,
+        mes,
+        cantidadDia,
+        cantidadMes,
+    });
 
     const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
     const nombreSAT = `resumen_${safeFecha}_${Date.now()}.png`;
@@ -173,7 +209,9 @@ export async function generarYEnviarResumen({ token, dia }) {
         data: {
             imageUrl,
             fecha: String(fecha),
-            cantidad: String(cantidad),
+            mes: String(mes),
+            cantidadDia: String(cantidadDia),
+            cantidadMes: String(cantidadMes),
         },
         android: {
             priority: "HIGH",
