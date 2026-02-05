@@ -159,11 +159,9 @@ export async function obtenerCantidad(dia) {
 }
 
 function monthNameEsFromFecha(fechaYYYYMMDD) {
-    // fecha: "2026-02-05"
     const d = new Date(`${fechaYYYYMMDD}T00:00:00Z`);
     const fmt = new Intl.DateTimeFormat("es-AR", { month: "long" });
     const name = fmt.format(d);
-    // Capitalizamos primera letra: "febrero" -> "Febrero"
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
@@ -206,7 +204,12 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    // ===== Fondo general
+    // Formato miles
+    const nf = new Intl.NumberFormat("es-AR");
+    const cantidadDiaFmt = nf.format(Number(cantidadDia));
+    const cantidadMesFmt = nf.format(Number(cantidadMes));
+
+    // ===== Fondo
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, width, height);
 
@@ -214,7 +217,7 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     const status = drawStatusBarTop(ctx, width, monitoreo);
     const topBarH = status.barH || 62;
 
-    // ===== Card principal (debajo de la franja)
+    // ===== Card principal
     const cardX = 40;
     const cardY = topBarH + 20;
     const cardW = width - 80;
@@ -223,25 +226,19 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     ctx.fillStyle = "#111b2e";
     ctx.fillRect(cardX, cardY, cardW, cardH);
 
-    // ===== Parsing fecha
-    const day = String(fecha).slice(8, 10);   // "05"
-    const year = String(fecha).slice(0, 4);  // "2026"
+    // ===== Mes y año (SIN día)
+    const year = String(fecha).slice(0, 4);
     const monthName = monthNameEsFromFecha(fecha); // "Febrero"
 
-    // ===== Header: Día grande + Mes
-    // Día grande a la izquierda
-    ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 80px "DejaVuSans"';
-    ctx.fillText(String(Number(day)), cardX + 40, cardY + 120);
-
-    // Mes al lado
+    // Mes centrado arriba
     ctx.fillStyle = "#cbd5e1";
-    ctx.font = 'bold 38px "DejaVuSans"';
-    ctx.fillText(monthName, cardX + 160, cardY + 95);
+    ctx.font = 'bold 44px "DejaVuSans"';
+    const monthW = ctx.measureText(monthName).width;
+    ctx.fillText(monthName, cardX + cardW / 2 - monthW / 2, cardY + 95);
 
-    // (Opcional) línea sutil debajo del header
+    // Línea sutil
     ctx.fillStyle = "#1f2a44";
-    ctx.fillRect(cardX + 40, cardY + 140, cardW - 80, 2);
+    ctx.fillRect(cardX + 40, cardY + 120, cardW - 80, 2);
 
     // ===== Totales (dos columnas)
     const leftX = cardX + 60;
@@ -251,7 +248,7 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     // Total del día
     ctx.fillStyle = "#ffffff";
     ctx.font = 'bold 66px "DejaVuSans"';
-    ctx.fillText(`${cantidadDia}`, leftX, baseY);
+    ctx.fillText(cantidadDiaFmt, leftX, baseY);
 
     ctx.fillStyle = "#cbd5e1";
     ctx.font = '22px "DejaVuSans"';
@@ -260,7 +257,7 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     // Total del mes
     ctx.fillStyle = "#ffffff";
     ctx.font = 'bold 52px "DejaVuSans"';
-    ctx.fillText(`${cantidadMes}`, rightX, baseY);
+    ctx.fillText(cantidadMesFmt, rightX, baseY);
 
     ctx.fillStyle = "#cbd5e1";
     ctx.font = '22px "DejaVuSans"';
@@ -269,14 +266,14 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     // ===== Año abajo al medio
     ctx.fillStyle = "#94a3b8";
     ctx.font = 'bold 32px "DejaVuSans"';
-    const yearText = String(year);
-    const yearW = ctx.measureText(yearText).width;
-    ctx.fillText(yearText, cardX + cardW / 2 - yearW / 2, cardY + cardH - 35);
+    const yearW = ctx.measureText(year).width;
+    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + cardH - 35);
 
     const buf = canvas.toBuffer("image/png");
     console.log("PNG bytes:", buf.length);
     return { buf, status };
 }
+
 
 // =====================
 // Subida SAT
