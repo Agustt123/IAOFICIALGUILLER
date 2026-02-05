@@ -56,7 +56,9 @@ function computeConsecutiveFails(registros) {
         if (streak > 0) afectados.push({ micro, streak });
     }
 
-    afectados.sort((a, b) => b.streak - a.streak || a.micro.localeCompare(b.micro));
+    afectados.sort(
+        (a, b) => b.streak - a.streak || a.micro.localeCompare(b.micro)
+    );
     const maxStreak = afectados[0]?.streak ?? 0;
 
     return { maxStreak, afectados };
@@ -70,13 +72,16 @@ function barStyle(maxStreak) {
     // 4+ => rojo
     if (maxStreak >= 4) return { bg: "#dc2626", fg: "#ffffff", title: "CRÍTICO" };
     if (maxStreak === 3) return { bg: "#f97316", fg: "#111827", title: "ALTO" };
-    if (maxStreak === 2) return { bg: "#facc15", fg: "#111827", title: "ATENCIÓN" };
-    if (maxStreak === 1) return { bg: "#22c55e", fg: "#052e16", title: "OK (con alertas)" };
+    if (maxStreak === 2)
+        return { bg: "#facc15", fg: "#111827", title: "ATENCIÓN" };
+    if (maxStreak === 1)
+        return { bg: "#22c55e", fg: "#052e16", title: "OK (con alertas)" };
     return { bg: "#22c55e", fg: "#052e16", title: "TODO OK" };
 }
 
 // =====================
 // Hash estable para "no enviar si no cambió"
+// (SIN FIRESTORE: guardamos en memoria)
 // =====================
 function stableStringify(obj) {
     const allKeys = [];
@@ -89,19 +94,16 @@ function sha256(str) {
     return crypto.createHash("sha256").update(str).digest("hex");
 }
 
+// ✅ Estado en memoria (no rompe si Firestore está deshabilitado)
+// OJO: se pierde al reiniciar el proceso
+const lastHashByToken = new Map();
+
 async function getLastHash(token) {
-    const doc = await admin.firestore().collection("push_state").doc(String(token)).get();
-    return doc.exists ? doc.data()?.lastHash : null;
+    return lastHashByToken.get(String(token)) ?? null;
 }
 
 async function setLastHash(token, lastHash) {
-    await admin.firestore().collection("push_state").doc(String(token)).set(
-        {
-            lastHash,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-    );
+    lastHashByToken.set(String(token), String(lastHash));
 }
 
 // =====================
@@ -120,7 +122,7 @@ export async function obtenerCantidad(dia) {
         { timeout: 100000 }
     );
 
-    // ✅ FIX axios + GET params correctos
+    // ✅ FIX: axios devuelve { data }, y en GET los params van en "params"
     const { data: dataServidores } = await axios.get(
         "http://dw.lightdata.app/monitoreo",
         {
@@ -145,11 +147,6 @@ export async function obtenerCantidad(dia) {
     // - viejo: { cantidad }
     const cantidadDia = Number(data.cantidadDia ?? data.cantidad ?? 0);
     const cantidadMes = Number(data.cantidadMes ?? 0);
-
-    const format = new Intl.NumberFormat("es-AR");
-
-    const cantidadDiaFmt = format.format(cantidadDia);
-    const cantidadMesFmt = format.format(cantidadMes);
 
     return {
         fecha: data.fecha ?? diaFinal,
@@ -197,7 +194,13 @@ function drawStatusBar(ctx, width, height, monitoreo) {
     return { maxStreak, afectados };
 }
 
-function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, monitoreo }) {
+function generarImagenResumenBuffer({
+    fecha,
+    mes,
+    cantidadDia,
+    cantidadMes,
+    monitoreo,
+}) {
     const width = 900;
     const height = 460;
     const canvas = createCanvas(width, height);
@@ -293,7 +296,8 @@ export const enviarResumenCantidadPush = async (req, res) => {
     }
 
     try {
-        const { fecha, mes, cantidadDia, cantidadMes, monitoreo } = await obtenerCantidad(dia);
+        const { fecha, mes, cantidadDia, cantidadMes, monitoreo } =
+            await obtenerCantidad(dia);
 
         // =====================
         // NO enviar si no cambió (incluye monitoreo)
@@ -307,7 +311,6 @@ export const enviarResumenCantidadPush = async (req, res) => {
             cantidadDia: Number(cantidadDia),
             cantidadMes: Number(cantidadMes),
             maxStreak,
-            // guardamos micro+streak (si querés más estricto: también guardar el ms del último registro)
             afectados: afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
         };
 
@@ -365,7 +368,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
 
         const fcmResponse = await admin.messaging().send(message);
 
-        // guardamos hash post-envío
+        // guardamos hash post-envío (memoria)
         await setLastHash(token, currentHash);
 
         return res.json({
@@ -394,7 +397,8 @@ export const enviarResumenCantidadPush = async (req, res) => {
 export async function generarYEnviarResumen({ token, dia }) {
     console.log(`Generando y enviando resumen para token ${token} y día ${dia}`);
 
-    const { fecha, mes, cantidadDia, cantidadMes, monitoreo } = await obtenerCantidad(dia);
+    const { fecha, mes, cantidadDia, cantidadMes, monitoreo } =
+        await obtenerCantidad(dia);
 
     // NO enviar si no cambió
     const registros = monitoreo?.data ?? [];
