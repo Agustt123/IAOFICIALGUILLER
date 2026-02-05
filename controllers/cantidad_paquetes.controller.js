@@ -158,97 +158,123 @@ export async function obtenerCantidad(dia) {
     };
 }
 
-// =====================
-// Imagen con franja de estado
-// =====================
-function drawStatusBar(ctx, width, height, monitoreo) {
+function monthNameEsFromFecha(fechaYYYYMMDD) {
+    // fecha: "2026-02-05"
+    const d = new Date(`${fechaYYYYMMDD}T00:00:00Z`);
+    const fmt = new Intl.DateTimeFormat("es-AR", { month: "long" });
+    const name = fmt.format(d);
+    // Capitalizamos primera letra: "febrero" -> "Febrero"
+    return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function drawStatusBarTop(ctx, width, monitoreo) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
     const style = barStyle(maxStreak);
 
     const barH = 62;
-    const y = height - barH;
+    const y = 0;
 
     // Fondo franja
     ctx.fillStyle = style.bg;
     ctx.fillRect(0, y, width, barH);
 
-    // Título izquierda
+    // Icon + título
     ctx.fillStyle = style.fg;
-    ctx.font = 'bold 24px "DejaVuSans"';
+    ctx.font = 'bold 22px "DejaVuSans"';
     const title = maxStreak === 0 ? "✅ TODO OK" : `⚠️ ${style.title}`;
-    ctx.fillText(title, 28, y + 40);
+    ctx.fillText(title, 22, y + 40);
 
-    // Lista micros afectados (si hay)
+    // Lista micros (si hay)
     if (maxStreak > 0 && afectados.length > 0) {
-        // Ej: "altaEnvios(3), backgps(2), ..."
         const list = afectados
-            .slice(0, 10) // para que no se vaya de largo
+            .slice(0, 10)
             .map((x) => `${x.micro}(${x.streak})`)
             .join(", ");
 
         ctx.font = '18px "DejaVuSans"';
-        ctx.fillText(list, 250, y + 40);
+        // texto a la derecha del título
+        ctx.fillText(list, 200, y + 40);
     }
 
-    return { maxStreak, afectados };
+    return { maxStreak, afectados, barH };
 }
 
-function generarImagenResumenBuffer({
-    fecha,
-    mes,
-    cantidadDia,
-    cantidadMes,
-    monitoreo,
-}) {
+function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, monitoreo }) {
     const width = 900;
     const height = 460;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    // Fondo
+    // ===== Fondo general
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, width, height);
 
-    // Card
+    // ===== Franja arriba
+    const status = drawStatusBarTop(ctx, width, monitoreo);
+    const topBarH = status.barH || 62;
+
+    // ===== Card principal (debajo de la franja)
+    const cardX = 40;
+    const cardY = topBarH + 20;
+    const cardW = width - 80;
+    const cardH = height - cardY - 40;
+
     ctx.fillStyle = "#111b2e";
-    ctx.fillRect(40, 40, width - 80, height - 120); // dejamos lugar a la franja
+    ctx.fillRect(cardX, cardY, cardW, cardH);
 
-    // Título
+    // ===== Parsing fecha
+    const day = String(fecha).slice(8, 10);   // "05"
+    const year = String(fecha).slice(0, 4);  // "2026"
+    const monthName = monthNameEsFromFecha(fecha); // "Febrero"
+
+    // ===== Header: Día grande + Mes
+    // Día grande a la izquierda
     ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 36px "DejaVuSans"';
-    ctx.fillText("Resumen Global", 80, 115);
+    ctx.font = 'bold 80px "DejaVuSans"';
+    ctx.fillText(String(Number(day)), cardX + 40, cardY + 120);
 
-    // Fecha / mes
+    // Mes al lado
     ctx.fillStyle = "#cbd5e1";
-    ctx.font = '24px "DejaVuSans"';
-    ctx.fillText(`Fecha: ${fecha}`, 80, 165);
-    ctx.fillText(`Mes: ${mes}`, 80, 200);
+    ctx.font = 'bold 38px "DejaVuSans"';
+    ctx.fillText(monthName, cardX + 160, cardY + 95);
 
-    // Día
+    // (Opcional) línea sutil debajo del header
+    ctx.fillStyle = "#1f2a44";
+    ctx.fillRect(cardX + 40, cardY + 140, cardW - 80, 2);
+
+    // ===== Totales (dos columnas)
+    const leftX = cardX + 60;
+    const rightX = cardX + 480;
+    const baseY = cardY + 250;
+
+    // Total del día
     ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 64px "DejaVuSans"';
-    ctx.fillText(`${cantidadDia}`, 80, 290);
+    ctx.font = 'bold 66px "DejaVuSans"';
+    ctx.fillText(`${cantidadDia}`, leftX, baseY);
 
     ctx.fillStyle = "#cbd5e1";
     ctx.font = '22px "DejaVuSans"';
-    ctx.fillText("Únicos del día", 80, 325);
+    ctx.fillText("Total del día", leftX, baseY + 35);
 
-    // Mes (derecha)
+    // Total del mes
     ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 48px "DejaVuSans"';
-    ctx.fillText(`${cantidadMes}`, 520, 290);
+    ctx.font = 'bold 52px "DejaVuSans"';
+    ctx.fillText(`${cantidadMes}`, rightX, baseY);
 
     ctx.fillStyle = "#cbd5e1";
     ctx.font = '22px "DejaVuSans"';
-    ctx.fillText("Únicos del mes", 520, 325);
+    ctx.fillText("Total del mes", rightX, baseY + 35);
 
-    // Franja estado (monitoreo)
-    const status = drawStatusBar(ctx, width, height, monitoreo);
+    // ===== Año abajo al medio
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = 'bold 32px "DejaVuSans"';
+    const yearText = String(year);
+    const yearW = ctx.measureText(yearText).width;
+    ctx.fillText(yearText, cardX + cardW / 2 - yearW / 2, cardY + cardH - 35);
 
     const buf = canvas.toBuffer("image/png");
     console.log("PNG bytes:", buf.length);
-
     return { buf, status };
 }
 
