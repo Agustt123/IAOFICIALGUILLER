@@ -180,7 +180,7 @@ function drawStatusBarTop(ctx, width, monitoreo) {
     // Icon + título
     ctx.fillStyle = style.fg;
     ctx.font = 'bold 22px "DejaVuSans"';
-    const title = maxStreak === 0 ? "✅ TODO OK" : `⚠️ ${style.title}`;
+    const title = maxStreak === 0 ? "" : `⚠️ ${style.title}`;
     ctx.fillText(title, 22, y + 40);
 
     // Lista micros (si hay)
