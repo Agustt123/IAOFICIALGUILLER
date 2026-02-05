@@ -3,7 +3,7 @@ import { obtenerCantidad } from "../controllers/cantidad_paquetes.controller.js"
 
 const cantidad = Router();
 
-cantidad.post('/', async (req, res) => {
+cantidad.get('/', async (req, res) => {
 
     const { dia } = req.body || ""
 

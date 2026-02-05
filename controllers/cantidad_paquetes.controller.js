@@ -146,6 +146,11 @@ export async function obtenerCantidad(dia) {
     const cantidadDia = Number(data.cantidadDia ?? data.cantidad ?? 0);
     const cantidadMes = Number(data.cantidadMes ?? 0);
 
+    const format = new Intl.NumberFormat("es-AR");
+
+    const cantidadDiaFmt = format.format(cantidadDia);
+    const cantidadMesFmt = format.format(cantidadMes);
+
     return {
         fecha: data.fecha ?? diaFinal,
         mes: data.mes ?? String(diaFinal).slice(0, 7),

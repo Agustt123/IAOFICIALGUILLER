@@ -12,6 +12,11 @@ export const registerDevice = async (req, res) => {
         });
     }
 
+    if (phone.includes("+54")) {
+        phone = phone.replace(/^\+54/, "");
+        phone = Number(phone);
+    }
+
     const usuarios = {
         1144241507: "hola Box",
         1140880763: "hola Facu",
