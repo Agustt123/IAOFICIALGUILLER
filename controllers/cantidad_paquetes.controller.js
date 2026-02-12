@@ -110,6 +110,7 @@ function todayLocalYYYYMMDD() {
 
     // restar 3 horas
     d.setHours(d.getHours() - 3);
+    console.log(d);
 
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
