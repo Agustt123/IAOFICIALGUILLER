@@ -472,6 +472,7 @@ export async function generarYEnviarResumen({ token, dia }) {
     const message = {
         token,
         data: {
+            channelId: "silent_high",
             imageUrl,
             fecha: String(fecha),
             mes: String(mes),
@@ -481,9 +482,12 @@ export async function generarYEnviarResumen({ token, dia }) {
             afectados: JSON.stringify(status?.afectados ?? []),
         },
         android: {
+            notification: { imageUrl },
+
             priority: "HIGH",
         },
-    };
+    }
+
 
     console.log("FCM message:", message);
 
