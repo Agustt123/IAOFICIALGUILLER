@@ -105,7 +105,7 @@ async function getLastHash(token) {
 async function setLastHash(token, lastHash) {
     lastHashByToken.set(String(token), String(lastHash));
 }
-function todayLocalYYYYMMDD() {
+export function todayLocalYYYYMMDD() {
     const d = new Date();
 
     // restar 3 horas
