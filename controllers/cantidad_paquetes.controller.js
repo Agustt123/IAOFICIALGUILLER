@@ -105,6 +105,14 @@ async function getLastHash(token) {
 async function setLastHash(token, lastHash) {
     lastHashByToken.set(String(token), String(lastHash));
 }
+function todayLocalYYYYMMDD() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
 
 // =====================
 // Data fetch
@@ -114,7 +122,8 @@ export async function obtenerCantidad(dia) {
     const diaFinal =
         typeof dia === "string" && dia.trim()
             ? dia
-            : new Date().toISOString().slice(0, 10);
+            : todayLocalYYYYMMDD();
+
 
     const { data } = await axios.post(
         "http://dw.lightdata.app/cantidad",
