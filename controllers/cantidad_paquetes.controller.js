@@ -537,7 +537,7 @@ export async function generarYEnviarResumen({ token, dia }) {
             metricOverCount: String(metricsSeverity?.overCount ?? 0),
         },
         android: {
-            notification: { imageUrl },
+            // notification: { imageUrl },
             priority: "HIGH",
         },
     };
