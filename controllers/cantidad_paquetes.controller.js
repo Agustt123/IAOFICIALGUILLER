@@ -36,7 +36,6 @@ function computeConsecutiveFails(registros) {
         return { maxStreak: 0, afectados: [] };
     }
 
-    // claves de microservicios (todo menos id/autofecha)
     const sample = registros[0] || {};
     const keys = Object.keys(sample).filter((k) => k !== "id" && k !== "autofecha");
 
@@ -122,18 +121,11 @@ export async function obtenerCantidad(dia) {
         params: { dia: diaFinal },
     });
 
-    if (!data?.ok) {
-        throw new Error(`Respuesta inválida de /cantidad: ${JSON.stringify(data)}`);
-    }
-
-    if (!dataServidores?.estado || !Array.isArray(dataServidores?.data)) {
+    if (!data?.ok) throw new Error(`Respuesta inválida de /cantidad: ${JSON.stringify(data)}`);
+    if (!dataServidores?.estado || !Array.isArray(dataServidores?.data))
         throw new Error(`Respuesta inválida de /monitoreo: ${JSON.stringify(dataServidores)}`);
-    }
 
     // Compat nombres viejos/nuevos:
-    // - hoy / mesCantidad / hoyMovimiento (nuevo)
-    // - cantidadDia / cantidadMes (viejo)
-    // - cantidad (fallback)
     const cantidadDia = Number(data.hoy ?? data.cantidadDia ?? data.cantidad ?? 0);
     const cantidadMes = Number(data.mesCantidad ?? data.cantidadMes ?? 0);
     const hoyMovimiento = Number(data.hoyMovimiento ?? 0);
@@ -150,9 +142,7 @@ export async function obtenerCantidad(dia) {
 }
 
 // =====================
-// NUEVO: Fetch de métricas (conjunto) desde el endpoint nuevo
-// Formato real:
-// { estado:true, data:{ did, rows:[{ servidor:'conjunto', usoCpu:'12.6', usoRam:'24.1', usoDisco:'59.0', ... }] } }
+// Métricas conjunto
 // =====================
 function toNum(v) {
     const n = Number(v);
@@ -170,42 +160,60 @@ export async function obtenerMetricasConjunto() {
 
     const row = data.data.rows[0] || {};
 
-    // temperaturaCpu la ignoramos (viene 0.0 en tu ejemplo)
     return {
         did: Number(data.data.did ?? row.did ?? 0) || null,
         usoCpu: toNum(row.usoCpu),
         usoRam: toNum(row.usoRam),
         usoDisco: toNum(row.usoDisco),
-        // opcionales por si querés futuro:
         carga1m: toNum(row.carga1m),
         latenciaMs: toNum(row.latenciaMs),
     };
 }
 
 // =====================
-// Semáforo de métricas
-// - OK: 0 >=80
-// - ATENCIÓN: 1 >=80
-// - ALTO: 2 >=80
-// - CRÍTICO: 3 >=80
+// Severidad global por métricas y micros (barra superior)
+// Umbrales métricas:
+//  <50 verde | 50-69 amarillo | 70-79 naranja | >=80 rojo
+// Micros (maxStreak):
+//  0 verde | 1 amarillo | 2 naranja | >=3 rojo
 // =====================
-const METRIC_WARN_PCT = 80;
+function severityRank(s) {
+    if (s === "rojo") return 3;
+    if (s === "naranja") return 2;
+    if (s === "amarillo") return 1;
+    return 0; // verde
+}
 
-function computeMetricsSeverity(metricas) {
-    const vals = [metricas?.usoCpu, metricas?.usoRam, metricas?.usoDisco]
-        .map((v) => toNum(v))
-        .filter((v) => v !== null);
+function pickWorstSeverity(a, b) {
+    return severityRank(a) >= severityRank(b) ? a : b;
+}
 
-    const over = vals.filter((v) => v >= METRIC_WARN_PCT).length;
+function severityFromMetricMax(pctMax) {
+    const v = Number(pctMax);
+    if (!Number.isFinite(v)) return "amarillo"; // desconocido => alerta leve
+    if (v >= 80) return "rojo";
+    if (v >= 70) return "naranja";
+    if (v >= 50) return "amarillo";
+    return "verde";
+}
 
-    if (over >= 3) return { level: "CRÍTICO", overCount: over };
-    if (over === 2) return { level: "ALTO", overCount: over };
-    if (over === 1) return { level: "ATENCIÓN", overCount: over };
-    return { level: "OK", overCount: over };
+function severityFromMaxStreak(maxStreak) {
+    const s = Number(maxStreak) || 0;
+    if (s >= 3) return "rojo";
+    if (s === 2) return "naranja";
+    if (s === 1) return "amarillo";
+    return "verde";
+}
+
+function severityStyle(sev) {
+    if (sev === "rojo") return { bg: "#dc2626", fg: "#ffffff", label: "CRÍTICO" };
+    if (sev === "naranja") return { bg: "#f97316", fg: "#111827", label: "ALTO" };
+    if (sev === "amarillo") return { bg: "#facc15", fg: "#111827", label: "ATENCIÓN" };
+    return { bg: "#22c55e", fg: "#052e16", label: "TODO OK" };
 }
 
 // =====================
-// Helpers de fecha / UI
+// UI helpers
 // =====================
 function monthNameEsFromFecha(fechaYYYYMMDD) {
     const d = new Date(`${fechaYYYYMMDD}T00:00:00Z`);
@@ -214,59 +222,97 @@ function monthNameEsFromFecha(fechaYYYYMMDD) {
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
+function fmtPct(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "--";
+    return `${Math.round(n)}%`;
+}
+
+function metricColorByPct(pct) {
+    const v = Number(pct);
+    if (!Number.isFinite(v)) return "#94a3b8"; // desconocido
+    if (v >= 80) return "#dc2626"; // rojo
+    if (v >= 70) return "#f97316"; // naranja
+    if (v >= 50) return "#facc15"; // amarillo
+    return "#cbd5e1"; // normal
+}
+
+// Ajusta font para que el texto entre en un ancho máximo
+function fitFontPxForText(ctx, text, maxWidth, startPx, minPx, fontFamily, weight = "bold") {
+    let px = startPx;
+    while (px > minPx) {
+        ctx.font = `${weight} ${px}px "${fontFamily}"`;
+        if (ctx.measureText(text).width <= maxWidth) return px;
+        px -= 2;
+    }
+    return minPx;
+}
+
 // =====================
-// Barra superior (SIEMPRE VERDE) + aviso si falla algo
-// (sacamos la línea finita, y no hay franja negra)
+// Barra superior (color por severidad)
 // =====================
 function drawStatusBarTop(ctx, width, monitoreo, metricas) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
 
-    const sev = computeMetricsSeverity(metricas);
-    const hayFalla = maxStreak > 0 || sev.overCount > 0;
+    const cpu = toNum(metricas?.usoCpu);
+    const ram = toNum(metricas?.usoRam);
+    const disk = toNum(metricas?.usoDisco);
+
+    const vals = [cpu, ram, disk].filter((v) => v !== null);
+    const pctMax = vals.length ? Math.max(...vals) : null;
+
+    // cuál fue el max (CPU/RAM/DISCO)
+    let pctMaxName = null;
+    if (vals.length) {
+        const pairs = [
+            { k: "CPU", v: cpu },
+            { k: "RAM", v: ram },
+            { k: "DISCO", v: disk },
+        ].filter((p) => p.v !== null);
+        pairs.sort((a, b) => (b.v ?? -1) - (a.v ?? -1));
+        pctMaxName = pairs[0]?.k ?? null;
+    }
+
+    const metricSev = severityFromMetricMax(pctMax);
+    const microsSev = severityFromMaxStreak(maxStreak);
+
+    const sev = pickWorstSeverity(metricSev, microsSev);
+    const style = severityStyle(sev);
 
     const barH = 62;
     const y = 0;
 
-    // ✅ siempre verde
-    ctx.fillStyle = "#22c55e";
+    ctx.fillStyle = style.bg;
     ctx.fillRect(0, y, width, barH);
 
-    // Texto
-    ctx.fillStyle = "#052e16";
+    ctx.fillStyle = style.fg;
     ctx.font = 'bold 22px "DejaVuSans"';
 
-    const title = hayFalla ? "⚠️ FALLA" : "TODO OK";
+    const title = sev === "verde" ? "TODO OK" : `⚠️ ${style.label}`;
     ctx.fillText(title, 22, y + 40);
 
-    if (hayFalla) {
-        const partes = [];
-
-        if (maxStreak > 0 && afectados.length > 0) {
-            const list = afectados
-                .slice(0, 8)
-                .map((x) => `${x.micro}(${x.streak})`)
-                .join(", ");
-            partes.push(list);
-        }
-
-        if (sev.overCount > 0) {
-            partes.push(`Métricas>=80: ${sev.overCount}`);
-        }
-
-        ctx.font = '18px "DejaVuSans"';
-        ctx.fillText(partes.join(" | "), 180, y + 40);
+    const parts = [];
+    if (pctMaxName && pctMax !== null) parts.push(`${pctMaxName} ${Math.round(pctMax)}%`);
+    if (maxStreak > 0 && afectados.length) {
+        const list = afectados.slice(0, 6).map((x) => `${x.micro}(${x.streak})`).join(", ");
+        parts.push(list);
     }
 
-    return { maxStreak, afectados, barH, sev, hayFalla };
+    if (parts.length) {
+        ctx.font = '18px "DejaVuSans"';
+        ctx.fillText(parts.join(" | "), 180, y + 40);
+    }
+
+    return { maxStreak, afectados, barH, sev, pctMax, pctMaxName };
 }
 
 // =====================
-// Imagen final (1 franja arriba, tarjeta con 3 métricas)
-// Layout pedido:
-// - arriba centro: AÑO
-// - 3 columnas: (label arriba / número abajo)
-//   Hoy / Mes (Marzo) / HoyMovimiento
+// Imagen final
+// - Año arriba centrado
+// - 3 mini-cards para separar (Hoy / Mes / Mov. hoy)
+// - Auto-fit de fuente para que no se pisen
+// - Línea abajo con CPU/RAM/DISCO con color por umbral
 // =====================
 function generarImagenResumenBuffer({
     fecha,
@@ -277,7 +323,7 @@ function generarImagenResumenBuffer({
     metricas,
 }) {
     const width = 900;
-    const height = 520;
+    const height = 560;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
@@ -290,7 +336,7 @@ function generarImagenResumenBuffer({
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, width, height);
 
-    // Franja (verde)
+    // Barra superior
     const status = drawStatusBarTop(ctx, width, monitoreo, metricas);
     const topOffset = status.barH || 62;
 
@@ -306,42 +352,96 @@ function generarImagenResumenBuffer({
     const year = String(fecha).slice(0, 4);
     const monthName = monthNameEsFromFecha(fecha);
 
-    // ✅ Año arriba centrado (donde antes iba el mes)
+    // Año centrado
     ctx.fillStyle = "#cbd5e1";
     ctx.font = 'bold 44px "DejaVuSans"';
     const yearW = ctx.measureText(year).width;
-    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + 95);
+    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + 85);
 
     // Separador
     ctx.fillStyle = "#1f2a44";
-    ctx.fillRect(cardX + 40, cardY + 120, cardW - 80, 2);
+    ctx.fillRect(cardX + 40, cardY + 110, cardW - 80, 2);
 
-    // ✅ 3 columnas
+    // Mini-cards (3 columnas)
+    const innerX = cardX + 40;
+    const innerY = cardY + 140;
+    const innerW = cardW - 80;
+    const innerH = 220;
+
+    const gap = 18;
+    const colW = (innerW - gap * 2) / 3;
+
     const cols = [
         { label: "Hoy", value: hoyFmt },
         { label: monthName, value: mesFmt },
-        { label: "Hoy mov.", value: movFmt }, // abreviado para que entre lindo
+        { label: "Mov. hoy", value: movFmt },
     ];
 
-    const startX = cardX + 60;
-    const innerW = cardW - 120;
-    const colW = innerW / 3;
-
-    const labelY = cardY + 205;
-    const valueY = cardY + 290;
-
     for (let i = 0; i < cols.length; i++) {
-        const x = startX + i * colW;
+        const x = innerX + i * (colW + gap);
+        const y = innerY;
+
+        // fondo mini-card para separar visualmente
+        ctx.fillStyle = "#0f1a2c";
+        ctx.fillRect(x, y, colW, innerH);
 
         // label
         ctx.fillStyle = "#cbd5e1";
-        ctx.font = 'bold 24px "DejaVuSans"';
-        ctx.fillText(cols[i].label, x, labelY);
+        ctx.font = 'bold 22px "DejaVuSans"';
+        ctx.fillText(cols[i].label, x + 20, y + 55);
 
-        // value
+        // value (auto-fit)
+        const maxTextW = colW - 40;
+        const fontPx = fitFontPxForText(ctx, cols[i].value, maxTextW, 60, 34, "DejaVuSans", "bold");
         ctx.fillStyle = "#ffffff";
-        ctx.font = 'bold 58px "DejaVuSans"';
-        ctx.fillText(cols[i].value, x, valueY);
+        ctx.font = `bold ${fontPx}px "DejaVuSans"`;
+        ctx.fillText(cols[i].value, x + 20, y + 140);
+
+        // separador vertical suave (derecha)
+        if (i < cols.length - 1) {
+            ctx.fillStyle = "#111b2e";
+            ctx.fillRect(x + colW + gap / 2 - 1, y + 10, 2, innerH - 20);
+        }
+    }
+
+    // Línea inferior CPU/RAM/DISCO
+    const cpu = metricas?.usoCpu;
+    const ram = metricas?.usoRam;
+    const disk = metricas?.usoDisco;
+
+    const infoY = cardY + cardH - 45;
+    ctx.font = 'bold 22px "DejaVuSans"';
+
+    const parts = [
+        { label: "CPU", val: cpu },
+        { label: "RAM", val: ram },
+        { label: "DISCO", val: disk },
+    ];
+
+    // medir centrado
+    const sep = "  •  ";
+    const sepW = ctx.measureText(sep).width;
+
+    const rendered = parts.map((p) => {
+        const text = `${p.label} ${fmtPct(p.val)}`;
+        const w = ctx.measureText(text).width;
+        return { ...p, text, w };
+    });
+
+    let totalW = rendered.reduce((acc, r) => acc + r.w, 0) + sepW * (rendered.length - 1);
+    let x0 = cardX + cardW / 2 - totalW / 2;
+
+    for (let i = 0; i < rendered.length; i++) {
+        const r = rendered[i];
+        ctx.fillStyle = metricColorByPct(r.val);
+        ctx.fillText(r.text, x0, infoY);
+        x0 += r.w;
+
+        if (i < rendered.length - 1) {
+            ctx.fillStyle = "#64748b";
+            ctx.fillText(sep, x0, infoY);
+            x0 += sepW;
+        }
     }
 
     const buf = canvas.toBuffer("image/png");
@@ -389,15 +489,20 @@ export const enviarResumenCantidadPush = async (req, res) => {
 
         const metricas = await obtenerMetricasConjunto();
 
-        // Estado de fallas
         const registros = monitoreo?.data ?? [];
         const { maxStreak, afectados } = computeConsecutiveFails(registros);
-        const sev = computeMetricsSeverity(metricas);
 
-        const failMicros = maxStreak > 0;
-        const failMetricas = sev.overCount > 0;
+        const cpu = toNum(metricas?.usoCpu);
+        const ram = toNum(metricas?.usoRam);
+        const disk = toNum(metricas?.usoDisco);
+        const vals = [cpu, ram, disk].filter((v) => v !== null);
+        const pctMax = vals.length ? Math.max(...vals) : null;
 
-        // ✅ Hash "de a miles" + fallas
+        const metricSev = severityFromMetricMax(pctMax);
+        const microsSev = severityFromMaxStreak(maxStreak);
+        const sev = pickWorstSeverity(metricSev, microsSev);
+
+        // ✅ Hash: "de a miles" + severidad + afectados
         const logicalPayload = {
             fecha: String(fecha),
             mes: String(mes),
@@ -406,12 +511,16 @@ export const enviarResumenCantidadPush = async (req, res) => {
             mesBucket: bucket1000(cantidadMes),
             hoyMovBucket: bucket1000(hoyMovimiento),
 
-            failMicros,
-            failMetricas,
-
+            sev,
             maxStreak,
             afectados: afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
-            metricas: { overCount: sev.overCount },
+
+            metricas: {
+                usoCpu: cpu,
+                usoRam: ram,
+                usoDisco: disk,
+                pctMax,
+            },
         };
 
         const currentHash = sha256(stableStringify(logicalPayload));
@@ -421,7 +530,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             return res.json({
                 ok: true,
                 skipped: true,
-                msg: "Sin cambios relevantes (a miles / fallas): no se envía notificación.",
+                msg: "Sin cambios relevantes (a miles / severidad): no se envía notificación.",
                 logicalPayload,
             });
         }
@@ -451,13 +560,16 @@ export const enviarResumenCantidadPush = async (req, res) => {
                 cantidadMes: String(cantidadMes),
                 hoyMovimiento: String(hoyMovimiento),
 
-                // micros
+                // status
+                sev: String(status?.sev ?? "verde"),
                 maxStreak: String(status?.maxStreak ?? 0),
                 afectados: JSON.stringify(status?.afectados ?? []),
 
                 // métricas
-                metricOverCount: String(status?.sev?.overCount ?? 0),
-                metricLevel: String(status?.sev?.level ?? "OK"),
+                usoCpu: String(cpu ?? ""),
+                usoRam: String(ram ?? ""),
+                usoDisco: String(disk ?? ""),
+                pctMax: String(pctMax ?? ""),
 
                 ...(titulo ? { titulo: String(titulo) } : {}),
                 ...(cuerpo ? { cuerpo: String(cuerpo) } : {}),
@@ -506,10 +618,16 @@ export async function generarYEnviarResumen({ token, dia }) {
 
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
-    const sev = computeMetricsSeverity(metricas);
 
-    const failMicros = maxStreak > 0;
-    const failMetricas = sev.overCount > 0;
+    const cpu = toNum(metricas?.usoCpu);
+    const ram = toNum(metricas?.usoRam);
+    const disk = toNum(metricas?.usoDisco);
+    const vals = [cpu, ram, disk].filter((v) => v !== null);
+    const pctMax = vals.length ? Math.max(...vals) : null;
+
+    const metricSev = severityFromMetricMax(pctMax);
+    const microsSev = severityFromMaxStreak(maxStreak);
+    const sev = pickWorstSeverity(metricSev, microsSev);
 
     const logicalPayload = {
         fecha: String(fecha),
@@ -519,19 +637,23 @@ export async function generarYEnviarResumen({ token, dia }) {
         mesBucket: bucket1000(cantidadMes),
         hoyMovBucket: bucket1000(hoyMovimiento),
 
-        failMicros,
-        failMetricas,
-
+        sev,
         maxStreak,
         afectados: afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
-        metricas: { overCount: sev.overCount },
+
+        metricas: {
+            usoCpu: cpu,
+            usoRam: ram,
+            usoDisco: disk,
+            pctMax,
+        },
     };
 
     const currentHash = sha256(stableStringify(logicalPayload));
     const lastHash = await getLastHash(token);
 
     if (lastHash && lastHash === currentHash) {
-        console.log("Sin cambios relevantes (a miles / fallas): no se envía notificación.");
+        console.log("Sin cambios relevantes (a miles / severidad): no se envía notificación.");
         return { skipped: true, logicalPayload };
     }
 
@@ -560,11 +682,14 @@ export async function generarYEnviarResumen({ token, dia }) {
             cantidadMes: String(cantidadMes),
             hoyMovimiento: String(hoyMovimiento),
 
+            sev: String(status?.sev ?? "verde"),
             maxStreak: String(status?.maxStreak ?? 0),
             afectados: JSON.stringify(status?.afectados ?? []),
 
-            metricOverCount: String(status?.sev?.overCount ?? 0),
-            metricLevel: String(status?.sev?.level ?? "OK"),
+            usoCpu: String(cpu ?? ""),
+            usoRam: String(ram ?? ""),
+            usoDisco: String(disk ?? ""),
+            pctMax: String(pctMax ?? ""),
         },
         android: {
             priority: "HIGH",
