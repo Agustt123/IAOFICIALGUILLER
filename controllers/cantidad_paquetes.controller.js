@@ -629,6 +629,13 @@ export async function generarYEnviarResumen({ token, dia }) {
         await obtenerCantidad(dia);
 
     const metricas = await obtenerMetricasConjunto();
+    console.log("METRICAS RAW (cron):", metricas?._raw);
+    console.log("METRICAS PARSED (cron):", {
+        cpu: metricas?.usoCpu,
+        ram: metricas?.usoRam,
+        disco: metricas?.usoDisco,
+    });
+
 
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
