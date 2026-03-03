@@ -57,14 +57,6 @@ function computeConsecutiveFails(registros) {
     return { maxStreak, afectados };
 }
 
-function barStyle(maxStreak) {
-    if (maxStreak >= 4) return { bg: "#dc2626", fg: "#ffffff", title: "CRÍTICO" };
-    if (maxStreak === 3) return { bg: "#f97316", fg: "#111827", title: "ALTO" };
-    if (maxStreak === 2) return { bg: "#facc15", fg: "#111827", title: "ATENCIÓN" };
-    if (maxStreak === 1) return { bg: "#22c55e", fg: "#052e16", title: "OK (con alertas)" };
-    return { bg: "#22c55e", fg: "#052e16", title: "TODO OK" };
-}
-
 // =====================
 // Hash estable para "no enviar si no cambió" (en memoria)
 // =====================
@@ -103,6 +95,15 @@ export function todayLocalYYYYMMDD() {
 }
 
 // =====================
+// Buckets "de a miles" para evitar spam
+// =====================
+function bucket1000(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return null;
+    return Math.floor(x / 1000); // 0,1,2...
+}
+
+// =====================
 // Fetch de cantidad + monitoreo micros (latencias)
 // =====================
 export async function obtenerCantidad(dia) {
@@ -129,14 +130,20 @@ export async function obtenerCantidad(dia) {
         throw new Error(`Respuesta inválida de /monitoreo: ${JSON.stringify(dataServidores)}`);
     }
 
-    const cantidadDia = Number(data.cantidadDia ?? data.cantidad ?? 0);
-    const cantidadMes = Number(data.cantidadMes ?? 0);
+    // Compat nombres viejos/nuevos:
+    // - hoy / mesCantidad / hoyMovimiento (nuevo)
+    // - cantidadDia / cantidadMes (viejo)
+    // - cantidad (fallback)
+    const cantidadDia = Number(data.hoy ?? data.cantidadDia ?? data.cantidad ?? 0);
+    const cantidadMes = Number(data.mesCantidad ?? data.cantidadMes ?? 0);
+    const hoyMovimiento = Number(data.hoyMovimiento ?? 0);
 
     return {
         fecha: data.fecha ?? diaFinal,
         mes: data.mes ?? String(diaFinal).slice(0, 7),
         cantidadDia,
         cantidadMes,
+        hoyMovimiento,
         mesNombre: data.nombre,
         monitoreo: dataServidores,
     };
@@ -176,12 +183,11 @@ export async function obtenerMetricasConjunto() {
 }
 
 // =====================
-// Semáforo de métricas (línea fina en franja negra)
-// Reglas:
-// - verde: 0 >=80
-// - amarillo: 1 >=80
-// - naranja: 2 >=80
-// - rojo: 3 o más >=80
+// Semáforo de métricas
+// - OK: 0 >=80
+// - ATENCIÓN: 1 >=80
+// - ALTO: 2 >=80
+// - CRÍTICO: 3 >=80
 // =====================
 const METRIC_WARN_PCT = 80;
 
@@ -192,29 +198,10 @@ function computeMetricsSeverity(metricas) {
 
     const over = vals.filter((v) => v >= METRIC_WARN_PCT).length;
 
-    if (over >= 3) return { color: "#dc2626", level: "CRÍTICO", overCount: over };
-    if (over === 2) return { color: "#f97316", level: "ALTO", overCount: over };
-    if (over === 1) return { color: "#facc15", level: "ATENCIÓN", overCount: over };
-    return { color: "#22c55e", level: "OK", overCount: over };
-}
-
-function drawMetricsBar(ctx, width, topY, metricas) {
-    const barH = 52;
-    const y = topY;
-
-    // fondo negro
-    ctx.fillStyle = "#0a0a0a";
-    ctx.fillRect(0, y, width, barH);
-
-    // línea fina central
-    const sev = computeMetricsSeverity(metricas);
-    const lineH = 6;
-    const lineY = y + barH / 2 - lineH / 2;
-
-    ctx.fillStyle = sev.color;
-    ctx.fillRect(0, lineY, width, lineH);
-
-    return { barH, sev };
+    if (over >= 3) return { level: "CRÍTICO", overCount: over };
+    if (over === 2) return { level: "ALTO", overCount: over };
+    if (over === 1) return { level: "ATENCIÓN", overCount: over };
+    return { level: "OK", overCount: over };
 }
 
 // =====================
@@ -227,60 +214,85 @@ function monthNameEsFromFecha(fechaYYYYMMDD) {
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function drawStatusBarTop(ctx, width, monitoreo) {
+// =====================
+// Barra superior (SIEMPRE VERDE) + aviso si falla algo
+// (sacamos la línea finita, y no hay franja negra)
+// =====================
+function drawStatusBarTop(ctx, width, monitoreo, metricas) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
-    const style = barStyle(maxStreak);
+
+    const sev = computeMetricsSeverity(metricas);
+    const hayFalla = maxStreak > 0 || sev.overCount > 0;
 
     const barH = 62;
     const y = 0;
 
-    ctx.fillStyle = style.bg;
+    // ✅ siempre verde
+    ctx.fillStyle = "#22c55e";
     ctx.fillRect(0, y, width, barH);
 
-    ctx.fillStyle = style.fg;
+    // Texto
+    ctx.fillStyle = "#052e16";
     ctx.font = 'bold 22px "DejaVuSans"';
-    const title = maxStreak === 0 ? "" : `⚠️ ${style.title}`;
+
+    const title = hayFalla ? "⚠️ FALLA" : "TODO OK";
     ctx.fillText(title, 22, y + 40);
 
-    if (maxStreak > 0 && afectados.length > 0) {
-        const list = afectados
-            .slice(0, 10)
-            .map((x) => `${x.micro}(${x.streak})`)
-            .join(", ");
+    if (hayFalla) {
+        const partes = [];
+
+        if (maxStreak > 0 && afectados.length > 0) {
+            const list = afectados
+                .slice(0, 8)
+                .map((x) => `${x.micro}(${x.streak})`)
+                .join(", ");
+            partes.push(list);
+        }
+
+        if (sev.overCount > 0) {
+            partes.push(`Métricas>=80: ${sev.overCount}`);
+        }
+
         ctx.font = '18px "DejaVuSans"';
-        ctx.fillText(list, 200, y + 40);
+        ctx.fillText(partes.join(" | "), 180, y + 40);
     }
 
-    return { maxStreak, afectados, barH };
+    return { maxStreak, afectados, barH, sev, hayFalla };
 }
 
 // =====================
-// Imagen final (con 2 franjas arriba)
+// Imagen final (1 franja arriba, tarjeta con 3 métricas)
+// Layout pedido:
+// - arriba centro: AÑO
+// - 3 columnas: (label arriba / número abajo)
+//   Hoy / Mes (Marzo) / HoyMovimiento
 // =====================
-function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, monitoreo, metricas }) {
+function generarImagenResumenBuffer({
+    fecha,
+    cantidadDia,
+    cantidadMes,
+    hoyMovimiento,
+    monitoreo,
+    metricas,
+}) {
     const width = 900;
-    const height = 520; // + franja de métricas
+    const height = 520;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
     const nf = new Intl.NumberFormat("es-AR");
-    const cantidadDiaFmt = nf.format(Number(cantidadDia));
-    const cantidadMesFmt = nf.format(Number(cantidadMes));
+    const hoyFmt = nf.format(Number(cantidadDia));
+    const mesFmt = nf.format(Number(cantidadMes));
+    const movFmt = nf.format(Number(hoyMovimiento));
 
     // Fondo
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, width, height);
 
-    // Franja 1 (micros)
-    const status = drawStatusBarTop(ctx, width, monitoreo);
-    const topBarH = status.barH || 62;
-
-    // Franja 2 (métricas)
-    const metricsBar = drawMetricsBar(ctx, width, topBarH, metricas);
-    const metricsBarH = metricsBar.barH || 52;
-
-    const topOffset = topBarH + metricsBarH;
+    // Franja (verde)
+    const status = drawStatusBarTop(ctx, width, monitoreo, metricas);
+    const topOffset = status.barH || 62;
 
     // Card principal
     const cardX = 40;
@@ -294,41 +306,46 @@ function generarImagenResumenBuffer({ fecha, mes, cantidadDia, cantidadMes, moni
     const year = String(fecha).slice(0, 4);
     const monthName = monthNameEsFromFecha(fecha);
 
+    // ✅ Año arriba centrado (donde antes iba el mes)
     ctx.fillStyle = "#cbd5e1";
     ctx.font = 'bold 44px "DejaVuSans"';
-    const monthW = ctx.measureText(monthName).width;
-    ctx.fillText(monthName, cardX + cardW / 2 - monthW / 2, cardY + 95);
+    const yearW = ctx.measureText(year).width;
+    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + 95);
 
+    // Separador
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, cardY + 120, cardW - 80, 2);
 
-    const leftX = cardX + 60;
-    const rightX = cardX + 480;
-    const baseY = cardY + 250;
+    // ✅ 3 columnas
+    const cols = [
+        { label: "Hoy", value: hoyFmt },
+        { label: monthName, value: mesFmt },
+        { label: "Hoy mov.", value: movFmt }, // abreviado para que entre lindo
+    ];
 
-    ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 66px "DejaVuSans"';
-    ctx.fillText(cantidadDiaFmt, leftX, baseY);
+    const startX = cardX + 60;
+    const innerW = cardW - 120;
+    const colW = innerW / 3;
 
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = '22px "DejaVuSans"';
-    ctx.fillText("Total del día", leftX, baseY + 35);
+    const labelY = cardY + 205;
+    const valueY = cardY + 290;
 
-    ctx.fillStyle = "#ffffff";
-    ctx.font = 'bold 52px "DejaVuSans"';
-    ctx.fillText(cantidadMesFmt, rightX, baseY);
+    for (let i = 0; i < cols.length; i++) {
+        const x = startX + i * colW;
 
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = '22px "DejaVuSans"';
-    ctx.fillText("Total del mes", rightX, baseY + 35);
+        // label
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = 'bold 24px "DejaVuSans"';
+        ctx.fillText(cols[i].label, x, labelY);
 
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = 'bold 32px "DejaVuSans"';
-    const yearW = ctx.measureText(year).width;
-    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + cardH - 35);
+        // value
+        ctx.fillStyle = "#ffffff";
+        ctx.font = 'bold 58px "DejaVuSans"';
+        ctx.fillText(cols[i].value, x, valueY);
+    }
 
     const buf = canvas.toBuffer("image/png");
-    return { buf, status, metricsSeverity: metricsBar.sev };
+    return { buf, status };
 }
 
 // =====================
@@ -367,30 +384,34 @@ export const enviarResumenCantidadPush = async (req, res) => {
     if (!token) return res.status(400).json({ ok: false, msg: "Faltan parámetros: token" });
 
     try {
-        const { fecha, mes, cantidadDia, cantidadMes, monitoreo } = await obtenerCantidad(dia);
+        const { fecha, mes, cantidadDia, cantidadMes, monitoreo, hoyMovimiento } =
+            await obtenerCantidad(dia);
 
-        // NUEVO: métricas conjunto
         const metricas = await obtenerMetricasConjunto();
 
-        // Hash lógico (incluye monitoreo + severidad métricas)
+        // Estado de fallas
         const registros = monitoreo?.data ?? [];
         const { maxStreak, afectados } = computeConsecutiveFails(registros);
-
         const sev = computeMetricsSeverity(metricas);
 
+        const failMicros = maxStreak > 0;
+        const failMetricas = sev.overCount > 0;
+
+        // ✅ Hash "de a miles" + fallas
         const logicalPayload = {
             fecha: String(fecha),
             mes: String(mes),
-            cantidadDia: Number(cantidadDia),
-            cantidadMes: Number(cantidadMes),
+
+            hoyBucket: bucket1000(cantidadDia),
+            mesBucket: bucket1000(cantidadMes),
+            hoyMovBucket: bucket1000(hoyMovimiento),
+
+            failMicros,
+            failMetricas,
+
             maxStreak,
             afectados: afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
-            metricas: {
-                usoCpu: metricas?.usoCpu ?? null,
-                usoRam: metricas?.usoRam ?? null,
-                usoDisco: metricas?.usoDisco ?? null,
-                overCount: sev.overCount,
-            },
+            metricas: { overCount: sev.overCount },
         };
 
         const currentHash = sha256(stableStringify(logicalPayload));
@@ -400,17 +421,17 @@ export const enviarResumenCantidadPush = async (req, res) => {
             return res.json({
                 ok: true,
                 skipped: true,
-                msg: "Sin cambios: no se envía notificación (se mantiene la anterior).",
+                msg: "Sin cambios relevantes (a miles / fallas): no se envía notificación.",
                 logicalPayload,
             });
         }
 
         // Imagen
-        const { buf: bufferPng, status, metricsSeverity } = generarImagenResumenBuffer({
+        const { buf: bufferPng, status } = generarImagenResumenBuffer({
             fecha,
-            mes,
             cantidadDia,
             cantidadMes,
+            hoyMovimiento,
             monitoreo,
             metricas,
         });
@@ -428,14 +449,15 @@ export const enviarResumenCantidadPush = async (req, res) => {
                 mes: String(mes),
                 cantidadDia: String(cantidadDia),
                 cantidadMes: String(cantidadMes),
+                hoyMovimiento: String(hoyMovimiento),
 
                 // micros
                 maxStreak: String(status?.maxStreak ?? 0),
                 afectados: JSON.stringify(status?.afectados ?? []),
 
-                // métricas (para el cliente si querés)
-                metricLevel: String(metricsSeverity?.level ?? "OK"),
-                metricOverCount: String(metricsSeverity?.overCount ?? 0),
+                // métricas
+                metricOverCount: String(status?.sev?.overCount ?? 0),
+                metricLevel: String(status?.sev?.level ?? "OK"),
 
                 ...(titulo ? { titulo: String(titulo) } : {}),
                 ...(cuerpo ? { cuerpo: String(cuerpo) } : {}),
@@ -448,7 +470,6 @@ export const enviarResumenCantidadPush = async (req, res) => {
         };
 
         const fcmResponse = await admin.messaging().send(message);
-
         await setLastHash(token, currentHash);
 
         return res.json({
@@ -457,11 +478,12 @@ export const enviarResumenCantidadPush = async (req, res) => {
             mes,
             cantidadDia,
             cantidadMes,
+            hoyMovimiento,
             imageUrl,
             status,
             metricas,
-            metricsSeverity,
             fcmResponse,
+            logicalPayload,
         });
     } catch (error) {
         console.error(error);
@@ -477,42 +499,47 @@ export const enviarResumenCantidadPush = async (req, res) => {
 // Uso interno: generar y enviar
 // =====================
 export async function generarYEnviarResumen({ token, dia }) {
-    const { fecha, mes, cantidadDia, cantidadMes, monitoreo } = await obtenerCantidad(dia);
+    const { fecha, mes, cantidadDia, cantidadMes, monitoreo, hoyMovimiento } =
+        await obtenerCantidad(dia);
+
     const metricas = await obtenerMetricasConjunto();
 
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
-
     const sev = computeMetricsSeverity(metricas);
+
+    const failMicros = maxStreak > 0;
+    const failMetricas = sev.overCount > 0;
 
     const logicalPayload = {
         fecha: String(fecha),
         mes: String(mes),
-        cantidadDia: Number(cantidadDia),
-        cantidadMes: Number(cantidadMes),
+
+        hoyBucket: bucket1000(cantidadDia),
+        mesBucket: bucket1000(cantidadMes),
+        hoyMovBucket: bucket1000(hoyMovimiento),
+
+        failMicros,
+        failMetricas,
+
         maxStreak,
         afectados: afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
-        metricas: {
-            usoCpu: metricas?.usoCpu ?? null,
-            usoRam: metricas?.usoRam ?? null,
-            usoDisco: metricas?.usoDisco ?? null,
-            overCount: sev.overCount,
-        },
+        metricas: { overCount: sev.overCount },
     };
 
     const currentHash = sha256(stableStringify(logicalPayload));
     const lastHash = await getLastHash(token);
 
     if (lastHash && lastHash === currentHash) {
-        console.log("Sin cambios: no se envía notificación (se mantiene la anterior).");
-        return { skipped: true };
+        console.log("Sin cambios relevantes (a miles / fallas): no se envía notificación.");
+        return { skipped: true, logicalPayload };
     }
 
-    const { buf: bufferPng, status, metricsSeverity } = generarImagenResumenBuffer({
+    const { buf: bufferPng, status } = generarImagenResumenBuffer({
         fecha,
-        mes,
         cantidadDia,
         cantidadMes,
+        hoyMovimiento,
         monitoreo,
         metricas,
     });
@@ -531,13 +558,15 @@ export async function generarYEnviarResumen({ token, dia }) {
             mes: String(mes),
             cantidadDia: String(cantidadDia),
             cantidadMes: String(cantidadMes),
+            hoyMovimiento: String(hoyMovimiento),
+
             maxStreak: String(status?.maxStreak ?? 0),
             afectados: JSON.stringify(status?.afectados ?? []),
-            metricLevel: String(metricsSeverity?.level ?? "OK"),
-            metricOverCount: String(metricsSeverity?.overCount ?? 0),
+
+            metricOverCount: String(status?.sev?.overCount ?? 0),
+            metricLevel: String(status?.sev?.level ?? "OK"),
         },
         android: {
-            // notification: { imageUrl },
             priority: "HIGH",
         },
     };
@@ -545,5 +574,5 @@ export async function generarYEnviarResumen({ token, dia }) {
     const resp = await admin.messaging().send(message);
     await setLastHash(token, currentHash);
 
-    return resp;
+    return { ok: true, resp, imageUrl, logicalPayload };
 }
