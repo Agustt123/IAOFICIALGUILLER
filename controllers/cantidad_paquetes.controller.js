@@ -145,7 +145,9 @@ export async function obtenerCantidad(dia) {
 // Métricas conjunto
 // =====================
 function toNum(v) {
-    const n = Number(v);
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim().replace("%", "").replace(",", ".");
+    const n = Number(s);
     return Number.isFinite(n) ? n : null;
 }
 
@@ -154,12 +156,23 @@ export async function obtenerMetricasConjunto() {
         timeout: 15000,
     });
 
-    if (!data?.estado || !data?.data?.rows?.length) {
+    if (!data?.estado || !Array.isArray(data?.data?.rows) || data.data.rows.length === 0) {
         throw new Error(`Respuesta inválida de /monitoreo/metricas: ${JSON.stringify(data)}`);
     }
 
-    const row = data.data.rows[0] || {};
+    const rows = data.data.rows;
 
+    // ✅ agarrar la fila correcta aunque el orden cambie
+    const row =
+        rows.find(r =>
+            String(r.servidor).toLowerCase() === "conjunto" &&
+            String(r.endpoint).toUpperCase() === "ALL"
+        ) ||
+        rows.find(r => String(r.servidor).toLowerCase() === "conjunto") ||
+        rows[0] ||
+        {};
+
+    // ✅ DEVOLVÉ TAMBIÉN EL RAW para debug
     return {
         did: Number(data.data.did ?? row.did ?? 0) || null,
         usoCpu: toNum(row.usoCpu),
@@ -167,9 +180,9 @@ export async function obtenerMetricasConjunto() {
         usoDisco: toNum(row.usoDisco),
         carga1m: toNum(row.carga1m),
         latenciaMs: toNum(row.latenciaMs),
+        _raw: row, // <- clave para comparar
     };
 }
-
 // =====================
 // Severidad global por métricas y micros (barra superior)
 // Umbrales métricas:
@@ -501,7 +514,8 @@ export const enviarResumenCantidadPush = async (req, res) => {
         const metricSev = severityFromMetricMax(pctMax);
         const microsSev = severityFromMaxStreak(maxStreak);
         const sev = pickWorstSeverity(metricSev, microsSev);
-
+        console.log("METRICAS RAW:", metricas?._raw);
+        console.log("METRICAS PARSED:", { cpu: metricas.usoCpu, ram: metricas.usoRam, disco: metricas.usoDisco });
         // ✅ Hash: "de a miles" + severidad + afectados
         const logicalPayload = {
             fecha: String(fecha),
