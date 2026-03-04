@@ -125,18 +125,19 @@ export async function obtenerCantidad(dia) {
     if (!dataServidores?.estado || !Array.isArray(dataServidores?.data))
         throw new Error(`Respuesta inválida de /monitoreo: ${JSON.stringify(dataServidores)}`);
 
-    // Compat nombres viejos/nuevos:
     const cantidadDia = Number(data.hoy ?? data.cantidadDia ?? data.cantidad ?? 0);
     const cantidadMes = Number(data.mesCantidad ?? data.cantidadMes ?? 0);
-    const hoyMovimiento = Number(data.hoyMovimiento ?? 0);
+
+    // ✅ NUEVO
+    const anioCantidad = Number(data.añoCantidad ?? data.anioCantidad ?? 0);
 
     return {
         fecha: data.fecha ?? diaFinal,
         mes: data.mes ?? String(diaFinal).slice(0, 7),
         cantidadDia,
         cantidadMes,
-        hoyMovimiento,
-        mesNombre: data.nombre,
+        anioCantidad,
+        mesNombre: data.nombre, // si lo seguís usando en otro lado
         monitoreo: dataServidores,
     };
 }
@@ -335,7 +336,7 @@ function generarImagenResumenBuffer({
     fecha,
     cantidadDia,
     cantidadMes,
-    hoyMovimiento,
+    anioCantidad,
     monitoreo,
     metricas,
 }) {
@@ -347,13 +348,13 @@ function generarImagenResumenBuffer({
     const nf = new Intl.NumberFormat("es-AR");
     const hoyFmt = nf.format(Number(cantidadDia));
     const mesFmt = nf.format(Number(cantidadMes));
-    const movFmt = nf.format(Number(hoyMovimiento));
+    const anioFmt = nf.format(Number(anioCantidad));
 
     // Fondo
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, width, height);
 
-    // Barra superior (ya la tenés con semáforo)
+    // Barra superior
     const status = drawStatusBarTop(ctx, width, monitoreo, metricas);
     const topOffset = status.barH || 62;
 
@@ -366,10 +367,10 @@ function generarImagenResumenBuffer({
     ctx.fillStyle = "#111b2e";
     ctx.fillRect(cardX, cardY, cardW, cardH);
 
-    const year = String(fecha).slice(0, 4);
-    const monthName = monthNameEsFromFecha(fecha);
+    const year = String(fecha).slice(0, 4);        // "2026"
+    const monthName = monthNameEsFromFecha(fecha); // "Marzo"
 
-    // Año centrado arriba
+    // Título arriba (año centrado)
     ctx.fillStyle = "#cbd5e1";
     ctx.font = 'bold 44px "DejaVuSans"';
     const yearW = ctx.measureText(year).width;
@@ -380,7 +381,7 @@ function generarImagenResumenBuffer({
     ctx.fillRect(cardX + 40, cardY + 105, cardW - 80, 2);
 
     // === TRIÁNGULO ===
-    // Arriba: MES (centrado)
+    // Arriba: AÑO CANTIDAD (centrado)
     const topBoxW = cardW - 160;
     const topBoxH = 130;
     const topBoxX = cardX + (cardW - topBoxW) / 2;
@@ -391,16 +392,15 @@ function generarImagenResumenBuffer({
 
     ctx.fillStyle = "#cbd5e1";
     ctx.font = 'bold 24px "DejaVuSans"';
-    ctx.fillText(monthName, topBoxX + 24, topBoxY + 42);
+    ctx.fillText("Año", topBoxX + 24, topBoxY + 42);
 
-    const mesFont = fitFontPxForText(ctx, mesFmt, topBoxW - 48, 64, 36, "DejaVuSans", "bold");
+    const anioFont = fitFontPxForText(ctx, anioFmt, topBoxW - 48, 64, 36, "DejaVuSans", "bold");
     ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${mesFont}px "DejaVuSans"`;
-    // centrado
-    const mesW = ctx.measureText(mesFmt).width;
-    ctx.fillText(mesFmt, topBoxX + topBoxW / 2 - mesW / 2, topBoxY + 100);
+    ctx.font = `bold ${anioFont}px "DejaVuSans"`;
+    const anioW = ctx.measureText(anioFmt).width;
+    ctx.fillText(anioFmt, topBoxX + topBoxW / 2 - anioW / 2, topBoxY + 100);
 
-    // Abajo: 2 cajas (Hoy / Mov. hoy)
+    // Abajo: 2 cajas (Hoy / Mes)
     const bottomBoxW = (cardW - 120 - 18) / 2;
     const bottomBoxH = 160;
     const bottomY = topBoxY + topBoxH + 22;
@@ -420,26 +420,25 @@ function generarImagenResumenBuffer({
     ctx.font = `bold ${hoyFont}px "DejaVuSans"`;
     ctx.fillText(hoyFmt, leftX + 24, bottomY + 115);
 
-    // Mov. hoy (der)
+    // Mes (der)
     ctx.fillStyle = "#0f1a2c";
     ctx.fillRect(rightX, bottomY, bottomBoxW, bottomBoxH);
 
     ctx.fillStyle = "#cbd5e1";
     ctx.font = 'bold 24px "DejaVuSans"';
-    ctx.fillText("Mov. hoy", rightX + 24, bottomY + 50);
+    ctx.fillText(monthName, rightX + 24, bottomY + 50);
 
-    const movFont = fitFontPxForText(ctx, movFmt, bottomBoxW - 48, 62, 34, "DejaVuSans", "bold");
+    const mesFont = fitFontPxForText(ctx, mesFmt, bottomBoxW - 48, 62, 34, "DejaVuSans", "bold");
     ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${movFont}px "DejaVuSans"`;
-    ctx.fillText(movFmt, rightX + 24, bottomY + 115);
+    ctx.font = `bold ${mesFont}px "DejaVuSans"`;
+    ctx.fillText(mesFmt, rightX + 24, bottomY + 115);
 
     // Separador antes de métricas
     const metricsY = bottomY + bottomBoxH + 30;
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, metricsY - 18, cardW - 80, 2);
 
-    // === MÉTRICAS COMPLETAS ===
-    // Armamos una línea compacta. Si querés 2 líneas, lo hago.
+    // === MÉTRICAS (misma lógica que ya tenías) ===
     const cpu = metricas?.usoCpu;
     const ram = metricas?.usoRam;
     const disk = metricas?.usoDisco;
@@ -450,13 +449,10 @@ function generarImagenResumenBuffer({
     const temp = metricas?.temperaturaCpu;
 
     const parts = [];
-
-    // principales (con color)
     parts.push({ text: `CPU ${fmtPct(cpu)}`, color: metricColorByPct(cpu) });
     parts.push({ text: `RAM ${fmtPct(ram)}`, color: metricColorByPct(ram) });
     parts.push({ text: `DISCO ${fmtPct(disk)}`, color: metricColorByPct(disk) });
 
-    // extra
     if (lat !== null && lat !== undefined) parts.push({ text: `LAT ${Math.round(lat)}ms`, color: "#cbd5e1" });
     if (load !== null && load !== undefined) parts.push({ text: `LOAD ${Number(load).toFixed(2)}`, color: "#cbd5e1" });
     if (ramProc !== null && ramProc !== undefined) parts.push({ text: `RAMP ${Number(ramProc).toFixed(0)}MB`, color: "#cbd5e1" });
@@ -469,14 +465,9 @@ function generarImagenResumenBuffer({
     const sep = "  •  ";
     const sepW = ctx.measureText(sep).width;
 
-    const rendered = parts.map(p => ({
-        ...p,
-        w: ctx.measureText(p.text).width
-    }));
-
+    const rendered = parts.map(p => ({ ...p, w: ctx.measureText(p.text).width }));
     let totalW = rendered.reduce((a, r) => a + r.w, 0) + sepW * (rendered.length - 1);
 
-    // si no entra, bajamos font a 16
     if (totalW > cardW - 100) {
         ctx.font = 'bold 16px "DejaVuSans"';
         const sepW2 = ctx.measureText(sep).width;
