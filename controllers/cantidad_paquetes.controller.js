@@ -666,7 +666,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
 // Uso interno: generar y enviar
 // =====================
 export async function generarYEnviarResumen({ token, dia }) {
-    const { fecha, mes, cantidadDia, cantidadMes, monitoreo, hoyMovimiento } =
+    const { fecha, mes, cantidadDia, cantidadMes, monitoreo, anioCantidad } =
         await obtenerCantidad(dia);
 
     const metricas = await obtenerMetricasConjunto();
@@ -723,7 +723,7 @@ export async function generarYEnviarResumen({ token, dia }) {
         fecha,
         cantidadDia,
         cantidadMes,
-        hoyMovimiento,
+        anioCantidad,
         monitoreo,
         metricas,
     });
