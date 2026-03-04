@@ -382,57 +382,85 @@ function generarImagenResumenBuffer({
 
     // === TRIÁNGULO ===
     // Arriba: AÑO CANTIDAD (centrado)
+    // === TRIÁNGULO ===
+
+    // helper: caja con label a la IZQUIERDA y número centrado
+    function drawBoxWithLeftLabel({ x, y, w, h, label, valueText }) {
+        // fondo
+        ctx.fillStyle = "#0f1a2c";
+        ctx.fillRect(x, y, w, h);
+
+        // label a la izquierda (centrado vertical)
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = 'bold 22px "DejaVuSans"';
+        const labelW = ctx.measureText(label).width;
+        const labelX = x + 24;
+        const labelY = y + h / 2 + 8;
+        ctx.fillText(label, labelX, labelY);
+
+        // área útil para centrar el número (sin pisar label)
+        const leftPadForLabel = labelW + 48; // 24 margen + label + 24 margen
+        const innerX = x + leftPadForLabel;
+        const innerW = w - leftPadForLabel;
+
+        const fontPx = fitFontPxForText(ctx, valueText, innerW - 48, 64, 36, "DejaVuSans", "bold");
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold ${fontPx}px "DejaVuSans"`;
+
+        const textW = ctx.measureText(valueText).width;
+        const textX = innerX + innerW / 2 - textW / 2;
+        const textY = y + h / 2 + 18;
+        ctx.fillText(valueText, textX, textY);
+    }
+
+    // valores seguros (evita NaN)
+    const anioSafe = Number.isFinite(Number(anioCantidad)) ? Number(anioCantidad) : 0;
+    const hoySafe = Number.isFinite(Number(cantidadDia)) ? Number(cantidadDia) : 0;
+    const mesSafe = Number.isFinite(Number(cantidadMes)) ? Number(cantidadMes) : 0;
+
+    const anioFmt2 = nf.format(anioSafe);
+    const hoyFmt2 = nf.format(hoySafe);
+    const mesFmt2 = nf.format(mesSafe);
+
+    // Arriba: AÑO (centrado)
     const topBoxW = cardW - 160;
     const topBoxH = 130;
     const topBoxX = cardX + (cardW - topBoxW) / 2;
     const topBoxY = cardY + 135;
 
-    ctx.fillStyle = "#0f1a2c";
-    ctx.fillRect(topBoxX, topBoxY, topBoxW, topBoxH);
+    drawBoxWithLeftLabel({
+        x: topBoxX,
+        y: topBoxY,
+        w: topBoxW,
+        h: topBoxH,
+        label: "Año",
+        valueText: anioFmt2,
+    });
 
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = 'bold 24px "DejaVuSans"';
-    ctx.fillText("Año", topBoxX + 24, topBoxY + 42);
-
-    const anioFont = fitFontPxForText(ctx, anioFmt, topBoxW - 48, 64, 36, "DejaVuSans", "bold");
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${anioFont}px "DejaVuSans"`;
-    const anioW = ctx.measureText(anioFmt).width;
-    ctx.fillText(anioFmt, topBoxX + topBoxW / 2 - anioW / 2, topBoxY + 100);
-
-    // Abajo: 2 cajas (Hoy / Mes)
+    // Abajo: Hoy (izq) y Mes (der)
     const bottomBoxW = (cardW - 120 - 18) / 2;
     const bottomBoxH = 160;
     const bottomY = topBoxY + topBoxH + 22;
     const leftX = cardX + 60;
     const rightX = leftX + bottomBoxW + 18;
 
-    // Hoy (izq)
-    ctx.fillStyle = "#0f1a2c";
-    ctx.fillRect(leftX, bottomY, bottomBoxW, bottomBoxH);
+    drawBoxWithLeftLabel({
+        x: leftX,
+        y: bottomY,
+        w: bottomBoxW,
+        h: bottomBoxH,
+        label: "Hoy",
+        valueText: hoyFmt2,
+    });
 
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = 'bold 24px "DejaVuSans"';
-    ctx.fillText("Hoy", leftX + 24, bottomY + 50);
-
-    const hoyFont = fitFontPxForText(ctx, hoyFmt, bottomBoxW - 48, 62, 34, "DejaVuSans", "bold");
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${hoyFont}px "DejaVuSans"`;
-    ctx.fillText(hoyFmt, leftX + 24, bottomY + 115);
-
-    // Mes (der)
-    ctx.fillStyle = "#0f1a2c";
-    ctx.fillRect(rightX, bottomY, bottomBoxW, bottomBoxH);
-
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = 'bold 24px "DejaVuSans"';
-    ctx.fillText(monthName, rightX + 24, bottomY + 50);
-
-    const mesFont = fitFontPxForText(ctx, mesFmt, bottomBoxW - 48, 62, 34, "DejaVuSans", "bold");
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${mesFont}px "DejaVuSans"`;
-    ctx.fillText(mesFmt, rightX + 24, bottomY + 115);
-
+    drawBoxWithLeftLabel({
+        x: rightX,
+        y: bottomY,
+        w: bottomBoxW,
+        h: bottomBoxH,
+        label: monthName, // ✅ Marzo / Abril / etc
+        valueText: mesFmt2,
+    });
     // Separador antes de métricas
     const metricsY = bottomY + bottomBoxH + 30;
     ctx.fillStyle = "#1f2a44";
