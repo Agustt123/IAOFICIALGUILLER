@@ -697,7 +697,7 @@ export async function generarYEnviarResumen({ token, dia }) {
 
         hoyBucket: bucket1000(cantidadDia),
         mesBucket: bucket1000(cantidadMes),
-        hoyMovBucket: bucket1000(hoyMovimiento),
+        anioCantidad: bucket1000(anioCantidad),
 
         sev,
         maxStreak,
