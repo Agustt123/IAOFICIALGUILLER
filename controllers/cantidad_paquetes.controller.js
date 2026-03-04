@@ -538,7 +538,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
     if (!token) return res.status(400).json({ ok: false, msg: "Faltan parámetros: token" });
 
     try {
-        const { fecha, mes, cantidadDia, cantidadMes, monitoreo, hoyMovimiento } =
+        const { fecha, mes, cantidadDia, cantidadMes, anioCantidad, monitoreo } =
             await obtenerCantidad(dia);
 
         const metricas = await obtenerMetricasConjunto();
@@ -564,7 +564,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
 
             hoyBucket: bucket1000(cantidadDia),
             mesBucket: bucket1000(cantidadMes),
-            hoyMovBucket: bucket1000(hoyMovimiento),
+            anioBucket: bucket1000(anioCantidad),
 
             sev,
             maxStreak,
@@ -595,7 +595,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             fecha,
             cantidadDia,
             cantidadMes,
-            hoyMovimiento,
+            anioCantidad,   // ✅ ahora sí
             monitoreo,
             metricas,
         });
@@ -645,7 +645,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             mes,
             cantidadDia,
             cantidadMes,
-            hoyMovimiento,
+            anioCantidad,
             imageUrl,
             status,
             metricas,
@@ -742,7 +742,7 @@ export async function generarYEnviarResumen({ token, dia }) {
             mes: String(mes),
             cantidadDia: String(cantidadDia),
             cantidadMes: String(cantidadMes),
-            hoyMovimiento: String(hoyMovimiento),
+            anioCantidad: String(anioCantidad),
 
             sev: String(status?.sev ?? "verde"),
             maxStreak: String(status?.maxStreak ?? 0),
