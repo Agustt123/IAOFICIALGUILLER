@@ -152,9 +152,7 @@ function toNum(v) {
 }
 
 export async function obtenerMetricasConjunto() {
-    const { data } = await axios.get("https://dw.lightdata.app/monitoreo/metricas", {
-        timeout: 15000,
-    });
+    const { data } = await axios.get("https://dw.lightdata.app/monitoreo/metricas", { timeout: 15000 });
 
     if (!data?.estado || !Array.isArray(data?.data?.rows) || data.data.rows.length === 0) {
         throw new Error(`Respuesta inválida de /monitoreo/metricas: ${JSON.stringify(data)}`);
@@ -162,25 +160,31 @@ export async function obtenerMetricasConjunto() {
 
     const rows = data.data.rows;
 
-    // ✅ agarrar la fila correcta aunque el orden cambie
     const row =
-        rows.find(r =>
-            String(r.servidor).toLowerCase() === "conjunto" &&
-            String(r.endpoint).toUpperCase() === "ALL"
-        ) ||
+        rows.find(r => String(r.servidor).toLowerCase() === "conjunto" && String(r.endpoint).toUpperCase() === "ALL") ||
         rows.find(r => String(r.servidor).toLowerCase() === "conjunto") ||
         rows[0] ||
         {};
 
-    // ✅ DEVOLVÉ TAMBIÉN EL RAW para debug
     return {
         did: Number(data.data.did ?? row.did ?? 0) || null,
+
         usoCpu: toNum(row.usoCpu),
         usoRam: toNum(row.usoRam),
         usoDisco: toNum(row.usoDisco),
-        carga1m: toNum(row.carga1m),
+
         latenciaMs: toNum(row.latenciaMs),
-        _raw: row, // <- clave para comparar
+        carga1m: toNum(row.carga1m),
+
+        ramProcesoMb: toNum(row.ramProcesoMb),
+        cpuProceso: toNum(row.cpuProceso),
+
+        temperaturaCpu: toNum(row.temperaturaCpu),
+
+        codigoHttp: row.codigoHttp ?? null,
+        error: row.error ?? null,
+
+        _raw: row,
     };
 }
 // =====================
@@ -336,7 +340,7 @@ function generarImagenResumenBuffer({
     metricas,
 }) {
     const width = 900;
-    const height = 560;
+    const height = 600;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
@@ -349,7 +353,7 @@ function generarImagenResumenBuffer({
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, width, height);
 
-    // Barra superior
+    // Barra superior (ya la tenés con semáforo)
     const status = drawStatusBarTop(ctx, width, monitoreo, metricas);
     const topOffset = status.barH || 62;
 
@@ -365,102 +369,148 @@ function generarImagenResumenBuffer({
     const year = String(fecha).slice(0, 4);
     const monthName = monthNameEsFromFecha(fecha);
 
-    // Año centrado
+    // Año centrado arriba
     ctx.fillStyle = "#cbd5e1";
     ctx.font = 'bold 44px "DejaVuSans"';
     const yearW = ctx.measureText(year).width;
-    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + 85);
+    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + 80);
 
     // Separador
     ctx.fillStyle = "#1f2a44";
-    ctx.fillRect(cardX + 40, cardY + 110, cardW - 80, 2);
+    ctx.fillRect(cardX + 40, cardY + 105, cardW - 80, 2);
 
-    // Mini-cards (3 columnas)
-    const innerX = cardX + 40;
-    const innerY = cardY + 140;
-    const innerW = cardW - 80;
-    const innerH = 220;
+    // === TRIÁNGULO ===
+    // Arriba: MES (centrado)
+    const topBoxW = cardW - 160;
+    const topBoxH = 130;
+    const topBoxX = cardX + (cardW - topBoxW) / 2;
+    const topBoxY = cardY + 135;
 
-    const gap = 18;
-    const colW = (innerW - gap * 2) / 3;
+    ctx.fillStyle = "#0f1a2c";
+    ctx.fillRect(topBoxX, topBoxY, topBoxW, topBoxH);
 
-    const cols = [
-        { label: "Hoy", value: hoyFmt },
-        { label: monthName, value: mesFmt },
-        { label: "Mov. hoy", value: movFmt },
-    ];
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = 'bold 24px "DejaVuSans"';
+    ctx.fillText(monthName, topBoxX + 24, topBoxY + 42);
 
-    for (let i = 0; i < cols.length; i++) {
-        const x = innerX + i * (colW + gap);
-        const y = innerY;
+    const mesFont = fitFontPxForText(ctx, mesFmt, topBoxW - 48, 64, 36, "DejaVuSans", "bold");
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${mesFont}px "DejaVuSans"`;
+    // centrado
+    const mesW = ctx.measureText(mesFmt).width;
+    ctx.fillText(mesFmt, topBoxX + topBoxW / 2 - mesW / 2, topBoxY + 100);
 
-        // fondo mini-card para separar visualmente
-        ctx.fillStyle = "#0f1a2c";
-        ctx.fillRect(x, y, colW, innerH);
+    // Abajo: 2 cajas (Hoy / Mov. hoy)
+    const bottomBoxW = (cardW - 120 - 18) / 2;
+    const bottomBoxH = 160;
+    const bottomY = topBoxY + topBoxH + 22;
+    const leftX = cardX + 60;
+    const rightX = leftX + bottomBoxW + 18;
 
-        // label
-        ctx.fillStyle = "#cbd5e1";
-        ctx.font = 'bold 22px "DejaVuSans"';
-        ctx.fillText(cols[i].label, x + 20, y + 55);
+    // Hoy (izq)
+    ctx.fillStyle = "#0f1a2c";
+    ctx.fillRect(leftX, bottomY, bottomBoxW, bottomBoxH);
 
-        // value (auto-fit)
-        const maxTextW = colW - 40;
-        const fontPx = fitFontPxForText(ctx, cols[i].value, maxTextW, 60, 34, "DejaVuSans", "bold");
-        ctx.fillStyle = "#ffffff";
-        ctx.font = `bold ${fontPx}px "DejaVuSans"`;
-        ctx.fillText(cols[i].value, x + 20, y + 140);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = 'bold 24px "DejaVuSans"';
+    ctx.fillText("Hoy", leftX + 24, bottomY + 50);
 
-        // separador vertical suave (derecha)
-        if (i < cols.length - 1) {
-            ctx.fillStyle = "#111b2e";
-            ctx.fillRect(x + colW + gap / 2 - 1, y + 10, 2, innerH - 20);
-        }
-    }
+    const hoyFont = fitFontPxForText(ctx, hoyFmt, bottomBoxW - 48, 62, 34, "DejaVuSans", "bold");
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${hoyFont}px "DejaVuSans"`;
+    ctx.fillText(hoyFmt, leftX + 24, bottomY + 115);
 
-    // Línea inferior CPU/RAM/DISCO
+    // Mov. hoy (der)
+    ctx.fillStyle = "#0f1a2c";
+    ctx.fillRect(rightX, bottomY, bottomBoxW, bottomBoxH);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = 'bold 24px "DejaVuSans"';
+    ctx.fillText("Mov. hoy", rightX + 24, bottomY + 50);
+
+    const movFont = fitFontPxForText(ctx, movFmt, bottomBoxW - 48, 62, 34, "DejaVuSans", "bold");
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${movFont}px "DejaVuSans"`;
+    ctx.fillText(movFmt, rightX + 24, bottomY + 115);
+
+    // Separador antes de métricas
+    const metricsY = bottomY + bottomBoxH + 30;
+    ctx.fillStyle = "#1f2a44";
+    ctx.fillRect(cardX + 40, metricsY - 18, cardW - 80, 2);
+
+    // === MÉTRICAS COMPLETAS ===
+    // Armamos una línea compacta. Si querés 2 líneas, lo hago.
     const cpu = metricas?.usoCpu;
     const ram = metricas?.usoRam;
     const disk = metricas?.usoDisco;
+    const lat = metricas?.latenciaMs;
+    const load = metricas?.carga1m;
+    const ramProc = metricas?.ramProcesoMb;
+    const cpuProc = metricas?.cpuProceso;
+    const temp = metricas?.temperaturaCpu;
 
-    const infoY = cardY + cardH - 45;
-    ctx.font = 'bold 22px "DejaVuSans"';
+    const parts = [];
 
-    const parts = [
-        { label: "CPU", val: cpu },
-        { label: "RAM", val: ram },
-        { label: "DISCO", val: disk },
-    ];
+    // principales (con color)
+    parts.push({ text: `CPU ${fmtPct(cpu)}`, color: metricColorByPct(cpu) });
+    parts.push({ text: `RAM ${fmtPct(ram)}`, color: metricColorByPct(ram) });
+    parts.push({ text: `DISCO ${fmtPct(disk)}`, color: metricColorByPct(disk) });
 
-    // medir centrado
+    // extra
+    if (lat !== null && lat !== undefined) parts.push({ text: `LAT ${Math.round(lat)}ms`, color: "#cbd5e1" });
+    if (load !== null && load !== undefined) parts.push({ text: `LOAD ${Number(load).toFixed(2)}`, color: "#cbd5e1" });
+    if (ramProc !== null && ramProc !== undefined) parts.push({ text: `RAMP ${Number(ramProc).toFixed(0)}MB`, color: "#cbd5e1" });
+    if (cpuProc !== null && cpuProc !== undefined) parts.push({ text: `CPUP ${Number(cpuProc).toFixed(1)}%`, color: "#cbd5e1" });
+    if (temp !== null && temp !== undefined && Number(temp) > 0) parts.push({ text: `TEMP ${Number(temp).toFixed(0)}°`, color: "#cbd5e1" });
+
+    const lineY = metricsY + 25;
+    ctx.font = 'bold 18px "DejaVuSans"';
+
     const sep = "  •  ";
     const sepW = ctx.measureText(sep).width;
 
-    const rendered = parts.map((p) => {
-        const text = `${p.label} ${fmtPct(p.val)}`;
-        const w = ctx.measureText(text).width;
-        return { ...p, text, w };
-    });
+    const rendered = parts.map(p => ({
+        ...p,
+        w: ctx.measureText(p.text).width
+    }));
 
-    let totalW = rendered.reduce((acc, r) => acc + r.w, 0) + sepW * (rendered.length - 1);
-    let x0 = cardX + cardW / 2 - totalW / 2;
+    let totalW = rendered.reduce((a, r) => a + r.w, 0) + sepW * (rendered.length - 1);
 
-    for (let i = 0; i < rendered.length; i++) {
-        const r = rendered[i];
-        ctx.fillStyle = metricColorByPct(r.val);
-        ctx.fillText(r.text, x0, infoY);
-        x0 += r.w;
+    // si no entra, bajamos font a 16
+    if (totalW > cardW - 100) {
+        ctx.font = 'bold 16px "DejaVuSans"';
+        const sepW2 = ctx.measureText(sep).width;
+        const rendered2 = parts.map(p => ({ ...p, w: ctx.measureText(p.text).width }));
+        totalW = rendered2.reduce((a, r) => a + r.w, 0) + sepW2 * (rendered2.length - 1);
 
-        if (i < rendered.length - 1) {
-            ctx.fillStyle = "#64748b";
-            ctx.fillText(sep, x0, infoY);
-            x0 += sepW;
+        let x = cardX + cardW / 2 - totalW / 2;
+        for (let i = 0; i < rendered2.length; i++) {
+            ctx.fillStyle = rendered2[i].color;
+            ctx.fillText(rendered2[i].text, x, lineY);
+            x += rendered2[i].w;
+            if (i < rendered2.length - 1) {
+                ctx.fillStyle = "#64748b";
+                ctx.fillText(sep, x, lineY);
+                x += sepW2;
+            }
+        }
+    } else {
+        let x = cardX + cardW / 2 - totalW / 2;
+        for (let i = 0; i < rendered.length; i++) {
+            ctx.fillStyle = rendered[i].color;
+            ctx.fillText(rendered[i].text, x, lineY);
+            x += rendered[i].w;
+            if (i < rendered.length - 1) {
+                ctx.fillStyle = "#64748b";
+                ctx.fillText(sep, x, lineY);
+                x += sepW;
+            }
         }
     }
 
     const buf = canvas.toBuffer("image/png");
     return { buf, status };
 }
-
 // =====================
 // Subida SAT
 // =====================
@@ -624,7 +674,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
 // =====================
 // Uso interno: generar y enviar
 // =====================
-export async function generarYEnviarResumen({ token, dia }) {
+async function generarYEnviarResumen({ token, dia }) {
     const { fecha, mes, cantidadDia, cantidadMes, monitoreo, hoyMovimiento } =
         await obtenerCantidad(dia);
 
@@ -721,4 +771,4 @@ export async function generarYEnviarResumen({ token, dia }) {
     await setLastHash(token, currentHash);
 
     return { ok: true, resp, imageUrl, logicalPayload };
-}
+}   
