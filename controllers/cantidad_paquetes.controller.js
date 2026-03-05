@@ -390,27 +390,38 @@ function generarImagenResumenBuffer({
         ctx.fillStyle = "#0f1a2c";
         ctx.fillRect(x, y, w, h);
 
-        // label a la izquierda (centrado vertical)
-        ctx.fillStyle = "#cbd5e1";
+        // medir label para reservar espacio
         ctx.font = 'bold 22px "DejaVuSans"';
         const labelW = ctx.measureText(label).width;
-        const labelX = x + 24;
-        const labelY = y + h / 2 + 8;
-        ctx.fillText(label, labelX, labelY);
 
-        // área útil para centrar el número (sin pisar label)
-        const leftPadForLabel = labelW + 48; // 24 margen + label + 24 margen
+        const maxLabelW = Math.floor(w * 0.28);      // 👈 label ocupa máx 28% del ancho
+        const safeLabelW = Math.min(labelW, maxLabelW);
+
+        // dibujar label (centrado vertical real)
+        ctx.fillStyle = "#cbd5e1";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        ctx.fillText(label, x + 24, y + h / 2);
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+
+        // área útil para centrar número
+        const leftPadForLabel = safeLabelW + 56;     // margen extra
         const innerX = x + leftPadForLabel;
         const innerW = w - leftPadForLabel;
 
-        const fontPx = fitFontPxForText(ctx, valueText, innerW - 48, 64, 36, "DejaVuSans", "bold");
+        // número centrado
+        const fontPx = fitFontPxForText(ctx, valueText, innerW - 40, 64, 30, "DejaVuSans", "bold");
         ctx.fillStyle = "#ffffff";
         ctx.font = `bold ${fontPx}px "DejaVuSans"`;
 
         const textW = ctx.measureText(valueText).width;
         const textX = innerX + innerW / 2 - textW / 2;
-        const textY = y + h / 2 + 18;
-        ctx.fillText(valueText, textX, textY);
+
+        // centrado vertical real del número también
+        ctx.textBaseline = "middle";
+        ctx.fillText(valueText, textX, y + h / 2);
+        ctx.textBaseline = "alphabetic";
     }
 
     // valores seguros (evita NaN)
@@ -422,11 +433,10 @@ function generarImagenResumenBuffer({
     const hoyFmt2 = nf.format(hoySafe);
     const mesFmt2 = nf.format(mesSafe);
 
-    // Arriba: AÑO (centrado)
     const topBoxW = cardW - 160;
-    const topBoxH = 130;
+    const topBoxH = 100;                 // ✅ antes 130 (más compacto)
     const topBoxX = cardX + (cardW - topBoxW) / 2;
-    const topBoxY = cardY + 135;
+    const topBoxY = cardY + 125;         // ✅ antes 135 (sube un poco)
 
     drawBoxWithLeftLabel({
         x: topBoxX,
@@ -439,8 +449,8 @@ function generarImagenResumenBuffer({
 
     // Abajo: Hoy (izq) y Mes (der)
     const bottomBoxW = (cardW - 120 - 18) / 2;
-    const bottomBoxH = 160;
-    const bottomY = topBoxY + topBoxH + 22;
+    const bottomBoxH = 135;              // ✅ antes 160 (opcional pero recomendado)
+    const bottomY = topBoxY + topBoxH + 16; // ✅ antes +22 (más cerca)
     const leftX = cardX + 60;
     const rightX = leftX + bottomBoxW + 18;
 
