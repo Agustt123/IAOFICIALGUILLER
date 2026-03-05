@@ -446,7 +446,7 @@ function generarImagenResumenBuffer({
     // Abajo: Hoy (izq) y Mes (der)
     const bottomBoxW = (cardW - 120 - 18) / 2;
     const bottomBoxH = 135;              // ✅ antes 160 (opcional pero recomendado)
-    const bottomY = topBoxY + topBoxH + 16; // ✅ antes +22 (más cerca)
+    const bottomY = (cardY + cardH) - 40 - bottomBoxH
     const leftX = cardX + 60;
     const rightX = leftX + bottomBoxW + 18;
 
