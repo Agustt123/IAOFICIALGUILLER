@@ -346,9 +346,6 @@ function generarImagenResumenBuffer({
     const ctx = canvas.getContext("2d");
 
     const nf = new Intl.NumberFormat("es-AR");
-    const hoyFmt = nf.format(Number(cantidadDia));
-    const mesFmt = nf.format(Number(cantidadMes));
-    const anioFmt = nf.format(Number(anioCantidad));
 
     // Fondo
     ctx.fillStyle = "#0b1220";
@@ -370,15 +367,9 @@ function generarImagenResumenBuffer({
     const year = String(fecha).slice(0, 4);        // "2026"
     const monthName = monthNameEsFromFecha(fecha); // "Marzo"
 
-
-
-    // Separador
+    // Separador superior (más arriba, ya no hay título 2026 grande)
     ctx.fillStyle = "#1f2a44";
-    ctx.fillRect(cardX + 40, cardY + 105, cardW - 80, 2);
-
-    // === TRIÁNGULO ===
-    // Arriba: AÑO CANTIDAD (centrado)
-    // === TRIÁNGULO ===
+    ctx.fillRect(cardX + 40, cardY + 45, cardW - 80, 2);
 
     // helper: caja con label a la IZQUIERDA y número centrado
     function drawBoxWithLeftLabel({ x, y, w, h, label, valueText }) {
@@ -386,38 +377,38 @@ function generarImagenResumenBuffer({
         ctx.fillStyle = "#0f1a2c";
         ctx.fillRect(x, y, w, h);
 
-        // medir label para reservar espacio
+        // medir label para reservar espacio (sin pasarse)
         ctx.font = 'bold 22px "DejaVuSans"';
         const labelW = ctx.measureText(label).width;
 
-        const maxLabelW = Math.floor(w * 0.28);      // 👈 label ocupa máx 28% del ancho
+        const maxLabelW = Math.floor(w * 0.28);
         const safeLabelW = Math.min(labelW, maxLabelW);
 
-        // dibujar label (centrado vertical real)
+        // label a la izquierda centrado vertical REAL
         ctx.fillStyle = "#cbd5e1";
         ctx.textBaseline = "middle";
         ctx.textAlign = "left";
-        ctx.fillText(label, x + 24, y + h / 2);
-        ctx.textBaseline = "alphabetic";
-        ctx.textAlign = "left";
+        ctx.fillText(label, x + 18, y + h / 2);
 
-        // área útil para centrar número
-        const leftPadForLabel = safeLabelW + 56;     // margen extra
+        // área útil para centrar el número
+        const leftPadForLabel = safeLabelW + 54;
         const innerX = x + leftPadForLabel;
         const innerW = w - leftPadForLabel;
 
-        // número centrado
-        const fontPx = fitFontPxForText(ctx, valueText, innerW - 40, 64, 30, "DejaVuSans", "bold");
+        // número centrado (vertical y horizontal)
+        const fontPx = fitFontPxForText(ctx, valueText, innerW - 24, 64, 28, "DejaVuSans", "bold");
         ctx.fillStyle = "#ffffff";
         ctx.font = `bold ${fontPx}px "DejaVuSans"`;
 
         const textW = ctx.measureText(valueText).width;
         const textX = innerX + innerW / 2 - textW / 2;
 
-        // centrado vertical real del número también
         ctx.textBaseline = "middle";
         ctx.fillText(valueText, textX, y + h / 2);
+
+        // reset
         ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
     }
 
     // valores seguros (evita NaN)
@@ -425,29 +416,34 @@ function generarImagenResumenBuffer({
     const hoySafe = Number.isFinite(Number(cantidadDia)) ? Number(cantidadDia) : 0;
     const mesSafe = Number.isFinite(Number(cantidadMes)) ? Number(cantidadMes) : 0;
 
-    const anioFmt2 = nf.format(anioSafe);
-    const hoyFmt2 = nf.format(hoySafe);
-    const mesFmt2 = nf.format(mesSafe);
+    const anioFmt = nf.format(anioSafe);
+    const hoyFmt = nf.format(hoySafe);
+    const mesFmt = nf.format(mesSafe);
 
-    const topBoxW = cardW - 160;
-    const topBoxH = 100;                 // ✅ antes 130 (más compacto)
+    // === ARRIBA: AÑO CANTIDAD ===
+    const topBoxW = cardW - 140;               // un poco más ancho (menos margen lateral)
+    const topBoxH = 95;                        // más compacto
     const topBoxX = cardX + (cardW - topBoxW) / 2;
-    const topBoxY = cardY + 125;         // ✅ antes 135 (sube un poco)
+    const topBoxY = cardY + 80;                // más arriba (porque sacamos el título grande)
 
     drawBoxWithLeftLabel({
         x: topBoxX,
         y: topBoxY,
         w: topBoxW,
         h: topBoxH,
-        label: "Año",
-        valueText: anioFmt2,
+        label: year,        // ✅ "2026" chiquito acá
+        valueText: anioFmt,
     });
 
-    // Abajo: Hoy (izq) y Mes (der)
-    const bottomBoxW = (cardW - 120 - 18) / 2;
-    const bottomBoxH = 135;              // ✅ antes 160 (opcional pero recomendado)
-    const bottomY = (cardY + cardH) - 40 - bottomBoxH
-    const leftX = cardX + 60;
+    // === ABAJO: HOY / MES (PEGADOS AL BORDE Y BIEN ABAJO) ===
+    const bottomBoxW = (cardW - 80 - 18) / 2;  // menos margen lateral
+    const bottomBoxH = 135;
+
+    // ✅ abajo bien pegado (antes del separador de métricas)
+    const bottomY = (cardY + cardH) - 70 - bottomBoxH;
+
+    // ✅ casi al borde de la card
+    const leftX = cardX + 28;
     const rightX = leftX + bottomBoxW + 18;
 
     drawBoxWithLeftLabel({
@@ -456,7 +452,7 @@ function generarImagenResumenBuffer({
         w: bottomBoxW,
         h: bottomBoxH,
         label: "Hoy",
-        valueText: hoyFmt2,
+        valueText: hoyFmt,
     });
 
     drawBoxWithLeftLabel({
@@ -464,15 +460,16 @@ function generarImagenResumenBuffer({
         y: bottomY,
         w: bottomBoxW,
         h: bottomBoxH,
-        label: monthName, // ✅ Marzo / Abril / etc
-        valueText: mesFmt2,
+        label: monthName,   // ✅ "Marzo"
+        valueText: mesFmt,
     });
-    // Separador antes de métricas
-    const metricsY = bottomY + bottomBoxH + 30;
+
+    // Separador antes de métricas (más cerca)
+    const metricsY = bottomY + bottomBoxH + 22;
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, metricsY - 18, cardW - 80, 2);
 
-    // === MÉTRICAS (misma lógica que ya tenías) ===
+    // === MÉTRICAS ===
     const cpu = metricas?.usoCpu;
     const ram = metricas?.usoRam;
     const disk = metricas?.usoDisco;
