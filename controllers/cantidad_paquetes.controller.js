@@ -370,11 +370,7 @@ function generarImagenResumenBuffer({
     const year = String(fecha).slice(0, 4);        // "2026"
     const monthName = monthNameEsFromFecha(fecha); // "Marzo"
 
-    // Título arriba (año centrado)
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = 'bold 44px "DejaVuSans"';
-    const yearW = ctx.measureText(year).width;
-    ctx.fillText(year, cardX + cardW / 2 - yearW / 2, cardY + 80);
+
 
     // Separador
     ctx.fillStyle = "#1f2a44";
