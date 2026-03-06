@@ -29,7 +29,7 @@ export const registerDevice = async (req, res) => {
     console.log('✅ Token guardado en memoria:', token);
     console.log('📦 Total tokens:', deviceStore.tokens.size);
 
-    return res.json({ ok: true, saludo: usuarios[phone] });
+    return res.json({ status: 200, ok: true, saludo: usuarios[phone] });
 };
 
 
