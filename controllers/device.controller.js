@@ -2,8 +2,9 @@ import { db } from "../config/db.js";
 import { deviceStore } from "../uttils/device.store.js";
 
 export const registerDevice = async (req, res) => {
-    const { phone, token, plataforma } = req.body;
     console.log('📥 /device/register BODY:', req.body);
+    let { phone, token, plataforma } = req.body;
+
 
     if (!phone || !token) {
         return res.status(400).json({
