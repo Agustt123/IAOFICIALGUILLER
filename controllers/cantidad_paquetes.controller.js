@@ -361,7 +361,7 @@ function generarImagenResumenBuffer({
     const cardW = width - 80;
     const cardH = height - cardY - 40;
 
-    ctx.fillStyle = "#111b2e";
+    ctx.fillStyle = "#101a30";
     ctx.fillRect(cardX, cardY, cardW, cardH);
 
     const year = String(fecha).slice(0, 4);
@@ -371,26 +371,24 @@ function generarImagenResumenBuffer({
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, cardY + 45, cardW - 80, 2);
 
-    // helper: card con número centrado + label abajo a la izquierda
+    // Card con número centrado + label abajo izquierda
     function drawStatCard({ x, y, w, h, label, valueText }) {
-        // fondo card
-        ctx.fillStyle = "#1a2d57";
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.22)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 3;
+
+        // casi mismo color que el fondo, apenas distinto
+        ctx.fillStyle = "#111b2e";
         ctx.fillRect(x, y, w, h);
+        ctx.restore();
 
-        // borde/interior sutil opcional para dar efecto card
-        ctx.fillStyle = "#223a70";
-        ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
-
-        // fondo interno
-        ctx.fillStyle = "#1d3261";
-        ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
-
-        // número grande centrado
-        const numberMaxW = w - 40;
+        // número
         const fontPx = fitFontPxForText(
             ctx,
             valueText,
-            numberMaxW,
+            w - 40,
             60,
             24,
             "DejaVuSans",
@@ -403,12 +401,12 @@ function generarImagenResumenBuffer({
         ctx.textBaseline = "middle";
         ctx.fillText(valueText, x + w / 2, y + h / 2 - 8);
 
-        // label abajo a la izquierda
-        ctx.font = 'bold 22px "DejaVuSans"';
-        ctx.fillStyle = "#f8fafc";
+        // label abajo izquierda
+        ctx.font = 'bold 20px "DejaVuSans"';
+        ctx.fillStyle = "#e2e8f0";
         ctx.textAlign = "left";
         ctx.textBaseline = "alphabetic";
-        ctx.fillText(label, x + 18, y + h - 16);
+        ctx.fillText(label, x + 16, y + h - 14);
 
         // reset
         ctx.textAlign = "left";
@@ -424,11 +422,11 @@ function generarImagenResumenBuffer({
     const hoyFmt = nf.format(hoySafe);
     const mesFmt = nf.format(mesSafe);
 
-    // === CARD SUPERIOR CENTRADA ===
-    const topBoxW = 360;
-    const topBoxH = 120;
+    // === CARD SUPERIOR ===
+    const topBoxW = 330;
+    const topBoxH = 110;
     const topBoxX = cardX + (cardW - topBoxW) / 2;
-    const topBoxY = cardY + 90;
+    const topBoxY = cardY + 85;
 
     drawStatCard({
         x: topBoxX,
@@ -440,12 +438,12 @@ function generarImagenResumenBuffer({
     });
 
     // === CARDS INFERIORES ===
-    const bottomBoxW = 260;
-    const bottomBoxH = 110;
+    const bottomBoxW = 240;
+    const bottomBoxH = 100;
     const bottomY = topBoxY + topBoxH + 70;
 
-    const leftX = cardX + 45;
-    const rightX = cardX + cardW - 45 - bottomBoxW;
+    const leftX = cardX + 42;
+    const rightX = cardX + cardW - 42 - bottomBoxW;
 
     drawStatCard({
         x: leftX,
