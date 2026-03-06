@@ -364,54 +364,58 @@ function generarImagenResumenBuffer({
     ctx.fillStyle = "#111b2e";
     ctx.fillRect(cardX, cardY, cardW, cardH);
 
-    const year = String(fecha).slice(0, 4);        // "2026"
-    const monthName = monthNameEsFromFecha(fecha); // "Marzo"
+    const year = String(fecha).slice(0, 4);
+    const monthName = monthNameEsFromFecha(fecha);
 
-    // Separador superior (más arriba, ya no hay título 2026 grande)
+    // Separador superior
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, cardY + 45, cardW - 80, 2);
 
-    // helper: caja con label a la IZQUIERDA y número centrado
-    function drawBoxWithLeftLabel({ x, y, w, h, label, valueText }) {
-        // fondo
-        ctx.fillStyle = "#0f1a2c";
+    // helper: card con número centrado + label abajo a la izquierda
+    function drawStatCard({ x, y, w, h, label, valueText }) {
+        // fondo card
+        ctx.fillStyle = "#1a2d57";
         ctx.fillRect(x, y, w, h);
 
-        // medir label para reservar espacio (sin pasarse)
-        ctx.font = 'bold 22px "DejaVuSans"';
-        const labelW = ctx.measureText(label).width;
+        // borde/interior sutil opcional para dar efecto card
+        ctx.fillStyle = "#223a70";
+        ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
 
-        const maxLabelW = Math.floor(w * 0.28);
-        const safeLabelW = Math.min(labelW, maxLabelW);
+        // fondo interno
+        ctx.fillStyle = "#1d3261";
+        ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
 
-        // label a la izquierda centrado vertical REAL
-        ctx.fillStyle = "#cbd5e1";
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "left";
-        ctx.fillText(label, x + 18, y + h / 2);
+        // número grande centrado
+        const numberMaxW = w - 40;
+        const fontPx = fitFontPxForText(
+            ctx,
+            valueText,
+            numberMaxW,
+            60,
+            24,
+            "DejaVuSans",
+            "bold"
+        );
 
-        // área útil para centrar el número
-        const leftPadForLabel = safeLabelW + 54;
-        const innerX = x + leftPadForLabel;
-        const innerW = w - leftPadForLabel;
-
-        // número centrado (vertical y horizontal)
-        const fontPx = fitFontPxForText(ctx, valueText, innerW - 24, 64, 28, "DejaVuSans", "bold");
-        ctx.fillStyle = "#ffffff";
         ctx.font = `bold ${fontPx}px "DejaVuSans"`;
-
-        const textW = ctx.measureText(valueText).width;
-        const textX = innerX + innerW / 2 - textW / 2;
-
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(valueText, textX, y + h / 2);
+        ctx.fillText(valueText, x + w / 2, y + h / 2 - 8);
+
+        // label abajo a la izquierda
+        ctx.font = 'bold 22px "DejaVuSans"';
+        ctx.fillStyle = "#f8fafc";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(label, x + 18, y + h - 16);
 
         // reset
-        ctx.textBaseline = "alphabetic";
         ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
     }
 
-    // valores seguros (evita NaN)
+    // valores seguros
     const anioSafe = Number.isFinite(Number(anioCantidad)) ? Number(anioCantidad) : 0;
     const hoySafe = Number.isFinite(Number(cantidadDia)) ? Number(cantidadDia) : 0;
     const mesSafe = Number.isFinite(Number(cantidadMes)) ? Number(cantidadMes) : 0;
@@ -420,33 +424,30 @@ function generarImagenResumenBuffer({
     const hoyFmt = nf.format(hoySafe);
     const mesFmt = nf.format(mesSafe);
 
-    // === ARRIBA: AÑO CANTIDAD ===
-    const topBoxW = cardW - 140;               // un poco más ancho (menos margen lateral)
-    const topBoxH = 95;                        // más compacto
+    // === CARD SUPERIOR CENTRADA ===
+    const topBoxW = 360;
+    const topBoxH = 120;
     const topBoxX = cardX + (cardW - topBoxW) / 2;
-    const topBoxY = cardY + 80;                // más arriba (porque sacamos el título grande)
+    const topBoxY = cardY + 90;
 
-    drawBoxWithLeftLabel({
+    drawStatCard({
         x: topBoxX,
         y: topBoxY,
         w: topBoxW,
         h: topBoxH,
-        label: year,        // ✅ "2026" chiquito acá
+        label: year,
         valueText: anioFmt,
     });
 
-    // === ABAJO: HOY / MES (PEGADOS AL BORDE Y BIEN ABAJO) ===
-    const bottomBoxW = (cardW - 80 - 18) / 2;  // menos margen lateral
-    const bottomBoxH = 135;
+    // === CARDS INFERIORES ===
+    const bottomBoxW = 260;
+    const bottomBoxH = 110;
+    const bottomY = topBoxY + topBoxH + 70;
 
-    // ✅ abajo bien pegado (antes del separador de métricas)
-    const bottomY = (cardY + cardH) - 70 - bottomBoxH;
+    const leftX = cardX + 45;
+    const rightX = cardX + cardW - 45 - bottomBoxW;
 
-    // ✅ casi al borde de la card
-    const leftX = cardX + 28;
-    const rightX = leftX + bottomBoxW + 18;
-
-    drawBoxWithLeftLabel({
+    drawStatCard({
         x: leftX,
         y: bottomY,
         w: bottomBoxW,
@@ -455,16 +456,16 @@ function generarImagenResumenBuffer({
         valueText: hoyFmt,
     });
 
-    drawBoxWithLeftLabel({
+    drawStatCard({
         x: rightX,
         y: bottomY,
         w: bottomBoxW,
         h: bottomBoxH,
-        label: monthName,   // ✅ "Marzo"
+        label: monthName,
         valueText: mesFmt,
     });
 
-    // Separador antes de métricas (más cerca)
+    // Separador antes de métricas
     const metricsY = bottomY + bottomBoxH + 22;
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, metricsY - 18, cardW - 80, 2);
