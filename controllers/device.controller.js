@@ -37,5 +37,25 @@ export async function obtenerDispositivosActivos() {
     return [...deviceStore.tokens].map(token => ({ token }));
 }
 
+export function eliminarDispositivoPorToken(token) {
+    const existed = deviceStore.tokens.delete(String(token));
+    if (existed) {
+        console.log("Token eliminado de memoria:", token);
+        console.log("Total tokens:", deviceStore.tokens.size);
+    }
+    return existed;
+}
+
+export const clearDevices = async (_req, res) => {
+    const total = deviceStore.tokens.size;
+    deviceStore.tokens.clear();
+
+    return res.json({
+        ok: true,
+        cleared: total,
+        total: deviceStore.tokens.size,
+    });
+};
+
 
 

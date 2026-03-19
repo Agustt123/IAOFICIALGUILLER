@@ -4,6 +4,7 @@ import { createCanvas, registerFont } from "canvas";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import { eliminarDispositivoPorToken } from "./device.controller.js";
 
 // =====================
 // Fuente (evita "cuadritos")
@@ -68,6 +69,14 @@ function stableStringify(obj) {
 
 function sha256(str) {
     return crypto.createHash("sha256").update(str).digest("hex");
+}
+
+function isInvalidFcmTokenError(error) {
+    const code = String(error?.code || "");
+    return (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token"
+    );
 }
 
 // Estado en memoria por token (se pierde al reiniciar)
@@ -188,6 +197,29 @@ export async function obtenerMetricasConjunto() {
         _raw: row,
     };
 }
+
+export async function obtenerProcesosConjunto() {
+    const { data } = await axios.get("https://dw.lightdata.app/monitoreo/procesos-conjunto", {
+        timeout: 15000,
+    });
+
+    if (!data?.estado || !Array.isArray(data?.data?.todos)) {
+        throw new Error(`Respuesta inválida de /monitoreo/procesos-conjunto: ${JSON.stringify(data)}`);
+    }
+
+    return data.data.todos.map((row) => ({
+        servidor: String(row.servidor || "desconocido"),
+        ok: Number(row.ok ?? 0) === 1,
+        codigoHttp: Number(row.codigoHttp ?? 0) || null,
+        latenciaMs: toNum(row.latenciaMs),
+        error: row.error ? String(row.error) : null,
+        procesos: Number(row.procesos ?? 0) || 0,
+        totalSegundos: toNum(row.total_segundos),
+        promedioSegundos: toNum(row.promedio_segundos),
+        maxSegundos: toNum(row.max_segundos),
+        _raw: row,
+    }));
+}
 // =====================
 // Severidad global por métricas y micros (barra superior)
 // Umbrales métricas:
@@ -230,6 +262,129 @@ function severityStyle(sev) {
     return { bg: "#22c55e", fg: "#052e16", label: "TODO OK" };
 }
 
+function shortSecondsLabel(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "--";
+    if (n >= 10) return `${Math.round(n)}s`;
+    return `${n.toFixed(1)}s`;
+}
+
+function satSeverityColor(sev) {
+    if (sev === "rojo") return "#dc2626";
+    if (sev === "naranja") return "#f97316";
+    if (sev === "amarillo") return "#facc15";
+    return "#22c55e";
+}
+
+function severityFromSatRow(row) {
+    if (!row.ok || row.error || (row.codigoHttp !== null && row.codigoHttp >= 500)) {
+        return "rojo";
+    }
+    if ((row.maxSegundos ?? 0) >= 15 || row.procesos >= 8) return "rojo";
+    if ((row.maxSegundos ?? 0) >= 8 || (row.promedioSegundos ?? 0) >= 5 || row.procesos >= 5) return "naranja";
+    if ((row.maxSegundos ?? 0) >= 4 || (row.promedioSegundos ?? 0) >= 2 || row.procesos >= 3 || (row.latenciaMs ?? 0) >= 1500) return "amarillo";
+    return "verde";
+}
+
+function satReasonForRow(row, sev) {
+    if (!row.ok) return "ERROR";
+    if (row.error) return "ERROR";
+    if (row.codigoHttp !== null && row.codigoHttp >= 500) return `HTTP ${row.codigoHttp}`;
+    if (sev === "rojo" || sev === "naranja") {
+        if ((row.maxSegundos ?? 0) > 0) return `MAX ${shortSecondsLabel(row.maxSegundos)}`;
+        if ((row.promedioSegundos ?? 0) > 0) return `AVG ${shortSecondsLabel(row.promedioSegundos)}`;
+        if (row.procesos > 0) return `PROC ${row.procesos}`;
+    }
+    if (row.procesos >= 3) return `PROC ${row.procesos}`;
+    if ((row.latenciaMs ?? 0) >= 1500) return `LAT ${Math.round(row.latenciaMs)}ms`;
+    if ((row.maxSegundos ?? 0) > 0) return `MAX ${shortSecondsLabel(row.maxSegundos)}`;
+    return "OK";
+}
+
+function analyzeSatProcesos(rows) {
+    const normalized = Array.isArray(rows) ? rows : [];
+    const incidents = normalized.map((row) => {
+        const sev = severityFromSatRow(row);
+        return {
+            servidor: row.servidor,
+            sev,
+            reason: satReasonForRow(row, sev),
+            procesos: row.procesos,
+            promedioSegundos: row.promedioSegundos,
+            maxSegundos: row.maxSegundos,
+            latenciaMs: row.latenciaMs,
+            ok: row.ok,
+            codigoHttp: row.codigoHttp,
+            error: row.error,
+        };
+    });
+
+    incidents.sort((a, b) =>
+        severityRank(b.sev) - severityRank(a.sev) ||
+        (b.maxSegundos ?? 0) - (a.maxSegundos ?? 0) ||
+        (b.procesos ?? 0) - (a.procesos ?? 0) ||
+        a.servidor.localeCompare(b.servidor)
+    );
+
+    const affected = incidents.filter((x) => x.sev !== "verde");
+    const sev = affected.reduce((acc, x) => pickWorstSeverity(acc, x.sev), "verde");
+    const top = (affected.length ? affected : incidents).slice(0, 3);
+    const summaryText = affected.length
+        ? top.map((x) => `${x.servidor} ${x.reason}`).join(" | ")
+        : `SAT OK ${normalized.length}/${normalized.length}`;
+
+    return {
+        sev,
+        total: normalized.length,
+        affectedCount: affected.length,
+        okCount: incidents.filter((x) => x.ok).length,
+        incidents,
+        affected,
+        top,
+        summaryText,
+    };
+}
+
+async function obtenerSatProcesosInfoSafe() {
+    try {
+        const satProcesos = await obtenerProcesosConjunto();
+        return analyzeSatProcesos(satProcesos);
+    } catch (error) {
+        return {
+            sev: "rojo",
+            total: 0,
+            affectedCount: 1,
+            okCount: 0,
+            incidents: [],
+            affected: [{
+                servidor: "sat",
+                sev: "rojo",
+                reason: "ERROR",
+                procesos: 0,
+                promedioSegundos: null,
+                maxSegundos: null,
+                latenciaMs: null,
+                ok: false,
+                codigoHttp: null,
+                error: String(error?.message || error),
+            }],
+            top: [{
+                servidor: "sat",
+                sev: "rojo",
+                reason: "ERROR",
+                procesos: 0,
+                promedioSegundos: null,
+                maxSegundos: null,
+                latenciaMs: null,
+                ok: false,
+                codigoHttp: null,
+                error: String(error?.message || error),
+            }],
+            summaryText: "sat ERROR",
+        };
+    }
+}
+
 // =====================
 // UI helpers
 // =====================
@@ -269,7 +424,7 @@ function fitFontPxForText(ctx, text, maxWidth, startPx, minPx, fontFamily, weigh
 // =====================
 // Barra superior (color por severidad)
 // =====================
-function drawStatusBarTop(ctx, width, monitoreo, metricas) {
+function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
 
@@ -294,8 +449,8 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas) {
 
     const metricSev = severityFromMetricMax(pctMax);
     const microsSev = severityFromMaxStreak(maxStreak);
-
-    const sev = pickWorstSeverity(metricSev, microsSev);
+    const satSev = satProcesosInfo?.sev ?? "verde";
+    const sev = pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satSev);
     const style = severityStyle(sev);
 
     const barH = 62;
@@ -315,6 +470,9 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas) {
     if (maxStreak > 0 && afectados.length) {
         const list = afectados.slice(0, 6).map((x) => `${x.micro}(${x.streak})`).join(", ");
         parts.push(list);
+    }
+    if (satProcesosInfo?.affectedCount) {
+        parts.push(`SAT ${satProcesosInfo.summaryText}`);
     }
 
     if (parts.length) {
@@ -339,6 +497,7 @@ function generarImagenResumenBuffer({
     anioCantidad,
     monitoreo,
     metricas,
+    satProcesosInfo,
 }) {
     const width = 900;
     const height = 600;
@@ -352,7 +511,7 @@ function generarImagenResumenBuffer({
     ctx.fillRect(0, 0, width, height);
 
     // Barra superior
-    const status = drawStatusBarTop(ctx, width, monitoreo, metricas);
+    const status = drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo);
     const topOffset = status.barH || 62;
 
     // Card principal
@@ -489,45 +648,37 @@ function generarImagenResumenBuffer({
     if (cpuProc !== null && cpuProc !== undefined) parts.push({ text: `CPUP ${Number(cpuProc).toFixed(1)}%`, color: "#cbd5e1" });
     if (temp !== null && temp !== undefined && Number(temp) > 0) parts.push({ text: `TEMP ${Number(temp).toFixed(0)}°`, color: "#cbd5e1" });
 
-    const lineY = metricsY + 25;
-    ctx.font = 'bold 18px "DejaVuSans"';
-
-    const sep = "  •  ";
-    const sepW = ctx.measureText(sep).width;
-
-    const rendered = parts.map(p => ({ ...p, w: ctx.measureText(p.text).width }));
-    let totalW = rendered.reduce((a, r) => a + r.w, 0) + sepW * (rendered.length - 1);
-
-    if (totalW > cardW - 100) {
-        ctx.font = 'bold 16px "DejaVuSans"';
-        const sepW2 = ctx.measureText(sep).width;
-        const rendered2 = parts.map(p => ({ ...p, w: ctx.measureText(p.text).width }));
-        totalW = rendered2.reduce((a, r) => a + r.w, 0) + sepW2 * (rendered2.length - 1);
-
+    function drawCenteredPartsLine(lineParts, y, fontPx) {
+        ctx.font = `bold ${fontPx}px "DejaVuSans"`;
+        const sep = "  •  ";
+        const sepW = ctx.measureText(sep).width;
+        const rendered = lineParts.map((p) => ({ ...p, w: ctx.measureText(p.text).width }));
+        const totalW = rendered.reduce((a, r) => a + r.w, 0) + sepW * Math.max(rendered.length - 1, 0);
         let x = cardX + cardW / 2 - totalW / 2;
-        for (let i = 0; i < rendered2.length; i++) {
-            ctx.fillStyle = rendered2[i].color;
-            ctx.fillText(rendered2[i].text, x, lineY);
-            x += rendered2[i].w;
-            if (i < rendered2.length - 1) {
-                ctx.fillStyle = "#64748b";
-                ctx.fillText(sep, x, lineY);
-                x += sepW2;
-            }
-        }
-    } else {
-        let x = cardX + cardW / 2 - totalW / 2;
+
         for (let i = 0; i < rendered.length; i++) {
             ctx.fillStyle = rendered[i].color;
-            ctx.fillText(rendered[i].text, x, lineY);
+            ctx.fillText(rendered[i].text, x, y);
             x += rendered[i].w;
             if (i < rendered.length - 1) {
                 ctx.fillStyle = "#64748b";
-                ctx.fillText(sep, x, lineY);
+                ctx.fillText(sep, x, y);
                 x += sepW;
             }
         }
     }
+
+    const lineY = metricsY + 25;
+    drawCenteredPartsLine(parts, lineY, parts.length > 6 ? 16 : 18);
+
+    const satParts = satProcesosInfo?.top?.length
+        ? satProcesosInfo.top.map((x) => ({
+            text: `SAT ${x.servidor} ${x.reason}`,
+            color: satSeverityColor(x.sev),
+        }))
+        : [{ text: "SAT OK", color: "#22c55e" }];
+
+    drawCenteredPartsLine(satParts, lineY + 34, satParts.length > 2 ? 14 : 16);
 
     const buf = canvas.toBuffer("image/png");
     return { buf, status };
@@ -572,6 +723,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             await obtenerCantidad(dia);
 
         const metricas = await obtenerMetricasConjunto();
+        const satProcesosInfo = await obtenerSatProcesosInfoSafe();
 
         const registros = monitoreo?.data ?? [];
         const { maxStreak, afectados } = computeConsecutiveFails(registros);
@@ -584,9 +736,10 @@ export const enviarResumenCantidadPush = async (req, res) => {
 
         const metricSev = severityFromMetricMax(pctMax);
         const microsSev = severityFromMaxStreak(maxStreak);
-        const sev = pickWorstSeverity(metricSev, microsSev);
+        const sev = pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satProcesosInfo.sev);
         console.log("METRICAS RAW:", metricas?._raw);
         console.log("METRICAS PARSED:", { cpu: metricas.usoCpu, ram: metricas.usoRam, disco: metricas.usoDisco });
+        console.log("SAT PROCESOS:", satProcesosInfo.summaryText);
         // ✅ Hash: "de a miles" + severidad + afectados
         const logicalPayload = {
             fecha: String(fecha),
@@ -605,6 +758,17 @@ export const enviarResumenCantidadPush = async (req, res) => {
                 usoRam: ram,
                 usoDisco: disk,
                 pctMax,
+            },
+            sat: {
+                sev: satProcesosInfo.sev,
+                affectedCount: satProcesosInfo.affectedCount,
+                top: satProcesosInfo.top.map((x) => ({
+                    servidor: x.servidor,
+                    sev: x.sev,
+                    reason: x.reason,
+                    procesosBucket: Number(x.procesos ?? 0),
+                    maxSegBucket: x.maxSegundos === null ? null : Math.floor(Number(x.maxSegundos)),
+                })),
             },
         };
 
@@ -628,12 +792,14 @@ export const enviarResumenCantidadPush = async (req, res) => {
             anioCantidad,   // ✅ ahora sí
             monitoreo,
             metricas,
+            satProcesosInfo,
         });
 
         const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
         const nombreSAT = (nombre && String(nombre)) || `resumen_${safeFecha}_${Date.now()}.png`;
 
         const imageUrl = await subirImagenSAT({ bufferPng, nombre: nombreSAT });
+        const hoyMovimiento = cantidadDia;
 
         const message = {
             token,
@@ -655,18 +821,31 @@ export const enviarResumenCantidadPush = async (req, res) => {
                 usoRam: String(ram ?? ""),
                 usoDisco: String(disk ?? ""),
                 pctMax: String(pctMax ?? ""),
+                satSev: String(satProcesosInfo.sev ?? "verde"),
+                satResumen: String(satProcesosInfo.summaryText ?? "SAT OK"),
+                satAfectados: JSON.stringify(satProcesosInfo.affected ?? []),
 
                 ...(titulo ? { titulo: String(titulo) } : {}),
                 ...(cuerpo ? { cuerpo: String(cuerpo) } : {}),
             },
             android: {
-                notification: { imageUrl },
-                channelId: "silent_high",
+                notification: {
+                    imageUrl,
+                    channelId: "silent_high",
+                },
                 priority: "HIGH",
             },
         };
 
-        const fcmResponse = await admin.messaging().send(message);
+        let fcmResponse;
+        try {
+            fcmResponse = await admin.messaging().send(message);
+        } catch (error) {
+            if (isInvalidFcmTokenError(error)) {
+                eliminarDispositivoPorToken(token);
+            }
+            throw error;
+        }
         await setLastHash(token, currentHash);
 
         return res.json({
@@ -679,6 +858,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             imageUrl,
             status,
             metricas,
+            satProcesosInfo,
             fcmResponse,
             logicalPayload,
         });
@@ -700,12 +880,14 @@ export async function generarYEnviarResumen({ token, dia }) {
         await obtenerCantidad(dia);
 
     const metricas = await obtenerMetricasConjunto();
+    const satProcesosInfo = await obtenerSatProcesosInfoSafe();
     console.log("METRICAS RAW (cron):", metricas?._raw);
     console.log("METRICAS PARSED (cron):", {
         cpu: metricas?.usoCpu,
         ram: metricas?.usoRam,
         disco: metricas?.usoDisco,
     });
+    console.log("SAT PROCESOS (cron):", satProcesosInfo.summaryText);
 
 
     const registros = monitoreo?.data ?? [];
@@ -719,7 +901,7 @@ export async function generarYEnviarResumen({ token, dia }) {
 
     const metricSev = severityFromMetricMax(pctMax);
     const microsSev = severityFromMaxStreak(maxStreak);
-    const sev = pickWorstSeverity(metricSev, microsSev);
+    const sev = pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satProcesosInfo.sev);
 
     const logicalPayload = {
         fecha: String(fecha),
@@ -739,6 +921,17 @@ export async function generarYEnviarResumen({ token, dia }) {
             usoDisco: disk,
             pctMax,
         },
+        sat: {
+            sev: satProcesosInfo.sev,
+            affectedCount: satProcesosInfo.affectedCount,
+            top: satProcesosInfo.top.map((x) => ({
+                servidor: x.servidor,
+                sev: x.sev,
+                reason: x.reason,
+                procesosBucket: Number(x.procesos ?? 0),
+                maxSegBucket: x.maxSegundos === null ? null : Math.floor(Number(x.maxSegundos)),
+            })),
+        },
     };
 
     const currentHash = sha256(stableStringify(logicalPayload));
@@ -756,6 +949,7 @@ export async function generarYEnviarResumen({ token, dia }) {
         anioCantidad,
         monitoreo,
         metricas,
+        satProcesosInfo,
     });
 
     const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
@@ -782,13 +976,27 @@ export async function generarYEnviarResumen({ token, dia }) {
             usoRam: String(ram ?? ""),
             usoDisco: String(disk ?? ""),
             pctMax: String(pctMax ?? ""),
+            satSev: String(satProcesosInfo.sev ?? "verde"),
+            satResumen: String(satProcesosInfo.summaryText ?? "SAT OK"),
+            satAfectados: JSON.stringify(satProcesosInfo.affected ?? []),
         },
         android: {
+            notification: {
+                channelId: "silent_high",
+            },
             priority: "HIGH",
         },
     };
 
-    const resp = await admin.messaging().send(message);
+    let resp;
+    try {
+        resp = await admin.messaging().send(message);
+    } catch (error) {
+        if (isInvalidFcmTokenError(error)) {
+            eliminarDispositivoPorToken(token);
+        }
+        throw error;
+    }
     await setLastHash(token, currentHash);
 
     return { ok: true, resp, imageUrl, logicalPayload };
