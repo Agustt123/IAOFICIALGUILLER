@@ -1000,9 +1000,7 @@ export async function generarYEnviarResumen({ token, dia }) {
             satAfectados: JSON.stringify(satProcesosInfo.affected ?? []),
         },
         android: {
-            notification: {
-                channelId: "silent_high",
-            },
+
             priority: "HIGH",
         },
     };
