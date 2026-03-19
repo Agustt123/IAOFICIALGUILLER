@@ -2,8 +2,9 @@ import { db } from "../config/db.js";
 import { deviceStore } from "../uttils/device.store.js";
 
 export const registerDevice = async (req, res) => {
-    const { phone, token, plataforma } = req.body;
     console.log('📥 /device/register BODY:', req.body);
+    let { phone, token, plataforma } = req.body;
+
 
     if (!phone || !token) {
         return res.status(400).json({
@@ -29,7 +30,7 @@ export const registerDevice = async (req, res) => {
     console.log('✅ Token guardado en memoria:', token);
     console.log('📦 Total tokens:', deviceStore.tokens.size);
 
-    return res.json({ ok: true, saludo: usuarios[phone] });
+    return res.json({ status: 200, ok: true, saludo: usuarios[phone] });
 };
 
 
