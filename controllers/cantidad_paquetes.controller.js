@@ -276,13 +276,31 @@ function satSeverityColor(sev) {
     return "#22c55e";
 }
 
+function isSatConjuntoRow(row) {
+    return String(row?.servidor || "").toLowerCase() === "conjunto";
+}
+
 function severityFromSatRow(row) {
     if (!row.ok || row.error || (row.codigoHttp !== null && row.codigoHttp >= 500)) {
         return "rojo";
     }
-    if ((row.maxSegundos ?? 0) >= 15 || row.procesos >= 8) return "rojo";
-    if ((row.maxSegundos ?? 0) >= 8 || (row.promedioSegundos ?? 0) >= 5 || row.procesos >= 5) return "naranja";
-    if ((row.maxSegundos ?? 0) >= 4 || (row.promedioSegundos ?? 0) >= 2 || row.procesos >= 3 || (row.latenciaMs ?? 0) >= 1500) return "amarillo";
+    const procesos = Number(row.procesos ?? 0);
+    const maxSeg = Number(row.maxSegundos ?? 0);
+    const avgSeg = Number(row.promedioSegundos ?? 0);
+    const latMs = Number(row.latenciaMs ?? 0);
+    const isConjunto = isSatConjuntoRow(row);
+
+    if (maxSeg >= 15) return "rojo";
+    if (!isConjunto && procesos >= 8) return "rojo";
+
+    if (maxSeg >= 8 || avgSeg >= 5) return "naranja";
+    if (!isConjunto && procesos >= 5) return "naranja";
+    if (isConjunto && procesos >= 20 && maxSeg >= 2) return "naranja";
+
+    if (maxSeg >= 4 || avgSeg >= 2 || latMs >= 1500) return "amarillo";
+    if (!isConjunto && procesos >= 3) return "amarillo";
+    if (isConjunto && procesos >= 15 && maxSeg >= 1) return "amarillo";
+
     return "verde";
 }
 
@@ -293,11 +311,12 @@ function satReasonForRow(row, sev) {
     if (sev === "rojo" || sev === "naranja") {
         if ((row.maxSegundos ?? 0) > 0) return `MAX ${shortSecondsLabel(row.maxSegundos)}`;
         if ((row.promedioSegundos ?? 0) > 0) return `AVG ${shortSecondsLabel(row.promedioSegundos)}`;
-        if (row.procesos > 0) return `PROC ${row.procesos}`;
+        if (!isSatConjuntoRow(row) && row.procesos > 0) return `PROC ${row.procesos}`;
     }
-    if (row.procesos >= 3) return `PROC ${row.procesos}`;
+    if (!isSatConjuntoRow(row) && row.procesos >= 3) return `PROC ${row.procesos}`;
     if ((row.latenciaMs ?? 0) >= 1500) return `LAT ${Math.round(row.latenciaMs)}ms`;
     if ((row.maxSegundos ?? 0) > 0) return `MAX ${shortSecondsLabel(row.maxSegundos)}`;
+    if (isSatConjuntoRow(row) && row.procesos > 0) return `TOTAL ${row.procesos}`;
     return "OK";
 }
 
