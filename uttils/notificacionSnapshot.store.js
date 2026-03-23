@@ -3,7 +3,7 @@ import axios from "axios";
 const SNAPSHOT_ENDPOINT =
     process.env.NOTIFICACION_SNAPSHOT_URL ?? "http://dw.lightdata.app/monitoreo/peor-pct";
 const DETALLE_ENDPOINT =
-    process.env.NOTIFICACION_DETALLE_URL ?? "http://dw.lightdata.app/monitoreo/notificacion-ultima";
+    process.env.NOTIFICACION_DETALLE_URL ?? "http://dw.lightdata.app/monitoreo/notificaciones-ultima";
 
 export async function guardarSnapshotNotificacion({
     autofecha,
