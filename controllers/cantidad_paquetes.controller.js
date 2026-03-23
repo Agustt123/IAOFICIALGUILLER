@@ -5,6 +5,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import { eliminarDispositivoPorToken } from "./device.controller.js";
+import {
+    guardarDetalleNotificacion,
+    guardarSnapshotNotificacion,
+} from "../uttils/notificacionSnapshot.store.js";
 
 // =====================
 // Fuente (evita "cuadritos")
@@ -262,6 +266,13 @@ function severityStyle(sev) {
     return { bg: "#22c55e", fg: "#052e16", label: "TODO OK" };
 }
 
+function severityPct(sev) {
+    if (sev === "rojo") return 99;
+    if (sev === "naranja") return 75;
+    if (sev === "amarillo") return 50;
+    return 0;
+}
+
 function shortSecondsLabel(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return "--";
@@ -402,6 +413,24 @@ async function obtenerSatProcesosInfoSafe() {
             summaryText: "sat ERROR",
         };
     }
+}
+
+function computeWorstPct({ pctMax, maxStreak, satProcesosInfo }) {
+    const candidates = [];
+
+    const metricPct = Number(pctMax);
+    if (Number.isFinite(metricPct)) {
+        candidates.push(Math.max(0, Math.min(99, Math.round(metricPct))));
+    }
+
+    const streak = Number(maxStreak) || 0;
+    if (streak >= 3) candidates.push(99);
+    else if (streak === 2) candidates.push(75);
+    else if (streak === 1) candidates.push(50);
+
+    candidates.push(severityPct(satProcesosInfo?.sev));
+
+    return candidates.length ? Math.max(...candidates) : 0;
 }
 
 // =====================
@@ -756,6 +785,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
         const metricSev = severityFromMetricMax(pctMax);
         const microsSev = severityFromMaxStreak(maxStreak);
         const sev = pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satProcesosInfo.sev);
+        const peorPct = computeWorstPct({ pctMax, maxStreak, satProcesosInfo });
         console.log("METRICAS RAW:", metricas?._raw);
         console.log("METRICAS PARSED:", { cpu: metricas.usoCpu, ram: metricas.usoRam, disco: metricas.usoDisco });
         console.log("SAT PROCESOS:", satProcesosInfo.summaryText);
@@ -804,6 +834,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
         }
 
         // Imagen
+        const imageStart = Date.now();
         const { buf: bufferPng, status } = generarImagenResumenBuffer({
             fecha,
             cantidadDia,
@@ -813,6 +844,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             metricas,
             satProcesosInfo,
         });
+        const tiempoImagenMs = Date.now() - imageStart;
 
         const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
         const nombreSAT = (nombre && String(nombre)) || `resumen_${safeFecha}_${Date.now()}.png`;
@@ -866,6 +898,44 @@ export const enviarResumenCantidadPush = async (req, res) => {
             throw error;
         }
         await setLastHash(token, currentHash);
+        try {
+            await guardarSnapshotNotificacion({
+                autofecha: new Date(),
+                cantidadDia,
+                peorPct,
+                tiempoImagenMs,
+            });
+        } catch (snapshotError) {
+            console.error("No se pudo guardar snapshot de notificación:", snapshotError?.message || snapshotError);
+        }
+
+        try {
+            await guardarDetalleNotificacion({
+                autofecha: new Date(),
+                token,
+                imageUrl,
+                fecha,
+                mes,
+                cantidadDia,
+                cantidadMes,
+                anioCantidad,
+                hoyMovimiento,
+                sev: status?.sev ?? "verde",
+                maxStreak: status?.maxStreak ?? 0,
+                afectados: status?.afectados ?? [],
+                usoCpu: cpu,
+                usoRam: ram,
+                usoDisco: disk,
+                pctMax,
+                satSev: satProcesosInfo.sev ?? "verde",
+                satResumen: satProcesosInfo.summaryText ?? "SAT OK",
+                satAfectados: satProcesosInfo.affected ?? [],
+                peorPct,
+                tiempoImagenMs,
+            });
+        } catch (detalleError) {
+            console.error("No se pudo guardar detalle de notificaciÃ³n:", detalleError?.message || detalleError);
+        }
 
         return res.json({
             ok: true,
@@ -880,6 +950,8 @@ export const enviarResumenCantidadPush = async (req, res) => {
             satProcesosInfo,
             fcmResponse,
             logicalPayload,
+            peorPct,
+            tiempoImagenMs,
         });
     } catch (error) {
         console.error(error);
@@ -921,6 +993,7 @@ export async function generarYEnviarResumen({ token, dia }) {
     const metricSev = severityFromMetricMax(pctMax);
     const microsSev = severityFromMaxStreak(maxStreak);
     const sev = pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satProcesosInfo.sev);
+    const peorPct = computeWorstPct({ pctMax, maxStreak, satProcesosInfo });
 
     const logicalPayload = {
         fecha: String(fecha),
@@ -961,6 +1034,7 @@ export async function generarYEnviarResumen({ token, dia }) {
         return { skipped: true, logicalPayload };
     }
 
+    const imageStart = Date.now();
     const { buf: bufferPng, status } = generarImagenResumenBuffer({
         fecha,
         cantidadDia,
@@ -970,6 +1044,7 @@ export async function generarYEnviarResumen({ token, dia }) {
         metricas,
         satProcesosInfo,
     });
+    const tiempoImagenMs = Date.now() - imageStart;
 
     const safeFecha = String(fecha).replace(/[^0-9a-zA-Z_-]/g, "-");
     const nombreSAT = `resumen_${safeFecha}_${Date.now()}.png`;
@@ -1015,6 +1090,44 @@ export async function generarYEnviarResumen({ token, dia }) {
         throw error;
     }
     await setLastHash(token, currentHash);
+    try {
+        await guardarSnapshotNotificacion({
+            autofecha: new Date(),
+            cantidadDia,
+            peorPct,
+            tiempoImagenMs,
+        });
+    } catch (snapshotError) {
+        console.error("No se pudo guardar snapshot de notificación:", snapshotError?.message || snapshotError);
+    }
 
-    return { ok: true, resp, imageUrl, logicalPayload };
+    try {
+        await guardarDetalleNotificacion({
+            autofecha: new Date(),
+            token,
+            imageUrl,
+            fecha,
+            mes,
+            cantidadDia,
+            cantidadMes,
+            anioCantidad,
+            hoyMovimiento: cantidadDia,
+            sev: status?.sev ?? "verde",
+            maxStreak: status?.maxStreak ?? 0,
+            afectados: status?.afectados ?? [],
+            usoCpu: cpu,
+            usoRam: ram,
+            usoDisco: disk,
+            pctMax,
+            satSev: satProcesosInfo.sev ?? "verde",
+            satResumen: satProcesosInfo.summaryText ?? "SAT OK",
+            satAfectados: satProcesosInfo.affected ?? [],
+            peorPct,
+            tiempoImagenMs,
+        });
+    } catch (detalleError) {
+        console.error("No se pudo guardar detalle de notificaciÃ³n:", detalleError?.message || detalleError);
+    }
+
+    return { ok: true, resp, imageUrl, logicalPayload, peorPct, tiempoImagenMs };
 }   
