@@ -94,6 +94,26 @@ Se evalúan:
 - `promedioSegundos`
 - `maxSegundos`
 
+### Regla de persistencia
+
+Para evitar ruido:
+
+- errores duros alertan en la primera aparición
+- degradaciones suaves solo alertan si se repiten `3 veces`
+
+Se consideran errores duros:
+
+- `ok = false`
+- hay `error`
+- `codigoHttp >= 500`
+
+Se consideran degradaciones suaves:
+
+- procesos altos
+- `maxSegundos`
+- `promedioSegundos`
+- `latenciaMs`
+
 ### Casos que van a rojo
 
 - `ok = false`

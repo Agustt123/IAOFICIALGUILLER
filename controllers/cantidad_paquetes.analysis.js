@@ -79,6 +79,10 @@ function severityFromSatRow(row) {
     return "verde";
 }
 
+function isImmediateDbIncident(row) {
+    return !row.ok || !!row.error || (row.codigoHttp !== null && row.codigoHttp >= 500);
+}
+
 function satReasonForRow(row, sev) {
     if (!row.ok || row.error) return "ERROR";
     if (row.codigoHttp !== null && row.codigoHttp >= 500) return `HTTP ${row.codigoHttp}`;
@@ -98,10 +102,11 @@ export function analyzeSatProcesos(rows) {
     const normalized = Array.isArray(rows) ? rows : [];
     const incidents = normalized.map((row) => {
         const sev = severityFromSatRow(row);
+        const reason = satReasonForRow(row, sev);
         return {
             servidor: row.servidor,
             sev,
-            reason: satReasonForRow(row, sev),
+            reason,
             procesos: row.procesos,
             promedioSegundos: row.promedioSegundos,
             maxSegundos: row.maxSegundos,
@@ -109,8 +114,15 @@ export function analyzeSatProcesos(rows) {
             ok: row.ok,
             codigoHttp: row.codigoHttp,
             error: row.error,
+            immediate: isImmediateDbIncident(row),
+            signature: `${row.servidor}|${reason}`,
         };
     });
+
+    const countsBySignature = incidents.reduce((acc, item) => {
+        acc.set(item.signature, (acc.get(item.signature) ?? 0) + 1);
+        return acc;
+    }, new Map());
 
     incidents.sort(
         (a, b) =>
@@ -120,17 +132,25 @@ export function analyzeSatProcesos(rows) {
             a.servidor.localeCompare(b.servidor)
     );
 
-    const affected = incidents.filter((x) => x.sev !== "verde");
-    const sev = affected.reduce((acc, x) => pickWorstSeverity(acc, x.sev), "verde");
-    const top = (affected.length ? affected : incidents).slice(0, 3);
+    const affected = incidents.filter((x) => {
+        if (x.sev === "verde") return false;
+        if (x.immediate) return true;
+        return (countsBySignature.get(x.signature) ?? 0) >= 3;
+    });
+
+    const uniqueAffected = affected.filter(
+        (item, index, list) => list.findIndex((x) => x.signature === item.signature) === index
+    );
+    const sev = uniqueAffected.reduce((acc, x) => pickWorstSeverity(acc, x.sev), "verde");
+    const top = (uniqueAffected.length ? uniqueAffected : incidents.slice(0, 3)).slice(0, 3);
 
     return {
         sev,
         total: normalized.length,
-        affectedCount: affected.length,
+        affectedCount: uniqueAffected.length,
         okCount: incidents.filter((x) => x.ok).length,
         incidents,
-        affected,
+        affected: uniqueAffected,
         top,
         summaryText: affected.length
             ? top.map((x) => `${x.servidor} ${x.reason}`).join(" | ")
