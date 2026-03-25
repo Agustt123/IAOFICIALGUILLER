@@ -267,7 +267,7 @@ async function guardarMetricasEnvio({
             peorPct,
             tiempoImagenMs,
         });
-        didNotificaciones = Number(detalleResponse?.id || 0);
+        didNotificaciones = Number(detalleResponse?.id || detalleResponse?.data?.id || 0);
         console.log(
             `Notificacion detalle guardada. did_notificaciones=${didNotificaciones} sev=${
                 status?.sev ?? "verde"
