@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import { eliminarDispositivoPorToken } from "./device.controller.js";
 import {
+    guardarAlertaNotificacion,
     guardarDetalleNotificacion,
     guardarSnapshotNotificacion,
 } from "../uttils/notificacionSnapshot.store.js";
@@ -226,6 +227,8 @@ async function guardarMetricasEnvio({
     peorPct,
     tiempoImagenMs,
 }) {
+    let didNotificaciones = 0;
+
     try {
         await guardarSnapshotNotificacion({
             autofecha: new Date(),
@@ -241,7 +244,7 @@ async function guardarMetricasEnvio({
     }
 
     try {
-        await guardarDetalleNotificacion({
+        const detalleResponse = await guardarDetalleNotificacion({
             autofecha: new Date(),
             token,
             imageUrl,
@@ -264,12 +267,42 @@ async function guardarMetricasEnvio({
             peorPct,
             tiempoImagenMs,
         });
+        didNotificaciones = Number(detalleResponse?.id || 0);
     } catch (detalleError) {
         console.error(
             "No se pudo guardar detalle de notificacion:",
             detalleError?.message || detalleError
         );
     }
+
+    if ((status?.sev ?? "verde") === "verde" || didNotificaciones <= 0) {
+        return { didNotificaciones };
+    }
+
+    try {
+        await guardarAlertaNotificacion({
+            didNotificaciones,
+            autofecha: new Date(),
+            token,
+            imageUrl,
+            sev: status?.sev ?? "verde",
+            porcentajeError: status?.pctMax,
+            afectados: status?.afectados ?? [],
+            satResumen: satProcesosInfo?.summaryText ?? "SAT OK",
+            satAfectados: satProcesosInfo?.affected ?? [],
+            usoCpu: status?.cpu,
+            usoRam: status?.ram,
+            usoDisco: status?.disk,
+            pctMax: status?.pctMax,
+        });
+    } catch (alertaError) {
+        console.error(
+            "No se pudo guardar alerta de notificacion:",
+            alertaError?.message || alertaError
+        );
+    }
+
+    return { didNotificaciones };
 }
 
 async function procesarEnvioResumen({
