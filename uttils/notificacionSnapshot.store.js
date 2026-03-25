@@ -103,25 +103,21 @@ export async function guardarAlertaNotificacion({
     pctMax,
 } = {}) {
     const afectadosList = Array.isArray(afectados) ? afectados : [];
-    const satAfectadosList = Array.isArray(satAfectados) ? satAfectados : [];
+    const satAfectadosList = Array.isArray(satAfectados)
+        ? satAfectados.filter((item) => String(item?.sev || "verde") !== "verde")
+        : [];
 
-    const resumenPartes = [
-        satResumen ? String(satResumen) : null,
-        afectadosList.length ? `${afectadosList.length} micros afectados` : null,
-        satAfectadosList.length ? `${satAfectadosList.length} incidentes procesos DB` : null,
-    ].filter(Boolean);
+    const microsFallando = afectadosList.map((item) => `${item.micro} PROC ${item.streak}`);
+    const procesosDbFallando = satAfectadosList.map((item) => {
+        const servidor = String(item?.servidor || "procesosdb");
+        const reason = item?.reason ? String(item.reason) : String(item?.sev || "alerta");
+        return `${servidor} ${reason}`;
+    });
 
-    const queFalloPartes = [
-        satResumen ? String(satResumen) : null,
-        afectadosList.length
-            ? afectadosList.map((item) => `${item.micro} streak ${item.streak}`).join(" | ")
-            : null,
-        satAfectadosList.length
-            ? satAfectadosList
-                  .map((item) => `${item.servidor} ${item.reason || item.sev || "alerta"}`)
-                  .join(" | ")
-            : null,
-    ].filter(Boolean);
+    const fallos = [...procesosDbFallando, ...microsFallando];
+
+    const resumenAlerta = fallos.slice(0, 3).join(" | ") || (satResumen ? String(satResumen) : null);
+    const queFallo = fallos.join(" | ") || (satResumen ? String(satResumen) : null);
 
     const payload = {
         did_notificaciones: Number(didNotificaciones ?? 0),
@@ -133,18 +129,12 @@ export async function guardarAlertaNotificacion({
                 ? null
                 : Number(porcentajeError),
         titulo: "Alerta de monitoreo",
-        resumen_alerta: resumenPartes.join(" | ") || null,
-        que_fallo: queFalloPartes.join(" | ") || null,
+        resumen_alerta: resumenAlerta,
+        que_fallo: queFallo,
         detalle_alerta: {
+            cosas_fallando: fallos,
             afectados: afectadosList,
-            sat_afectados: satAfectadosList,
-            sat_resumen: satResumen ? String(satResumen) : null,
-            metricas: {
-                uso_cpu: usoCpu === null || usoCpu === undefined ? null : Number(usoCpu),
-                uso_ram: usoRam === null || usoRam === undefined ? null : Number(usoRam),
-                uso_disco: usoDisco === null || usoDisco === undefined ? null : Number(usoDisco),
-                pct_max: pctMax === null || pctMax === undefined ? null : Number(pctMax),
-            },
+            procesos_db_afectados: satAfectadosList,
         },
         image_url: imageUrl ? String(imageUrl) : null,
         token: token ? String(token) : null,
