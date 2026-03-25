@@ -268,6 +268,11 @@ async function guardarMetricasEnvio({
             tiempoImagenMs,
         });
         didNotificaciones = Number(detalleResponse?.id || 0);
+        console.log(
+            `Notificacion detalle guardada. did_notificaciones=${didNotificaciones} sev=${
+                status?.sev ?? "verde"
+            }`
+        );
     } catch (detalleError) {
         console.error(
             "No se pudo guardar detalle de notificacion:",
@@ -276,11 +281,14 @@ async function guardarMetricasEnvio({
     }
 
     if ((status?.sev ?? "verde") === "verde" || didNotificaciones <= 0) {
+        console.log(
+            `Alerta omitida. sev=${status?.sev ?? "verde"} did_notificaciones=${didNotificaciones}`
+        );
         return { didNotificaciones };
     }
 
     try {
-        await guardarAlertaNotificacion({
+        const alertaResponse = await guardarAlertaNotificacion({
             didNotificaciones,
             autofecha: new Date(),
             token,
@@ -295,6 +303,11 @@ async function guardarMetricasEnvio({
             usoDisco: status?.disk,
             pctMax: status?.pctMax,
         });
+        console.log(
+            `Alerta guardada. did_notificaciones=${didNotificaciones} sev=${
+                status?.sev ?? "verde"
+            } respuesta=${JSON.stringify(alertaResponse)}`
+        );
     } catch (alertaError) {
         console.error(
             "No se pudo guardar alerta de notificacion:",
