@@ -85,7 +85,7 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
         );
     }
     if (satProcesosInfo?.affectedCount) {
-        parts.push(`SAT ${satProcesosInfo.summaryText}`);
+        parts.push(`PROCESOS DB ${satProcesosInfo.summaryText}`);
     }
 
     if (parts.length) {
@@ -236,10 +236,10 @@ export function generarImagenResumenBuffer({
 
     const satParts = satProcesosInfo?.top?.length
         ? satProcesosInfo.top.map((x) => ({
-              text: `SAT ${x.servidor} ${x.reason}`,
+              text: `PROCESOS DB ${x.servidor} ${x.reason}`,
               color: satSeverityColor(x.sev),
           }))
-        : [{ text: "SAT OK", color: "#22c55e" }];
+        : [{ text: "PROCESOS DB OK", color: "#22c55e" }];
 
     drawCenteredPartsLine(satParts, lineY + 34, satParts.length > 2 ? 14 : 16);
 

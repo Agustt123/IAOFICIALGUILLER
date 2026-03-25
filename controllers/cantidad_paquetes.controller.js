@@ -67,7 +67,7 @@ function logResumen(prefix, metricas, satProcesosInfo) {
         ram: metricas?.usoRam,
         disco: metricas?.usoDisco,
     });
-    console.log(`${label}SAT PROCESOS:`, satProcesosInfo?.summaryText);
+    console.log(`${label}PROCESOS DB:`, satProcesosInfo?.summaryText);
 }
 
 async function generarImagenYSubir({
@@ -127,7 +127,7 @@ function buildMessageData({
         usoDisco: String(status?.disk ?? ""),
         pctMax: String(status?.pctMax ?? ""),
         satSev: String(satProcesosInfo?.sev ?? "verde"),
-        satResumen: String(satProcesosInfo?.summaryText ?? "SAT OK"),
+        satResumen: String(satProcesosInfo?.summaryText ?? "PROCESOS DB OK"),
         satAfectados: JSON.stringify(satProcesosInfo?.affected ?? []),
         ...(titulo ? { titulo: String(titulo) } : {}),
         ...(cuerpo ? { cuerpo: String(cuerpo) } : {}),
@@ -262,7 +262,7 @@ async function guardarMetricasEnvio({
             usoDisco: status?.disk,
             pctMax: status?.pctMax,
             satSev: satProcesosInfo?.sev ?? "verde",
-            satResumen: satProcesosInfo?.summaryText ?? "SAT OK",
+            satResumen: satProcesosInfo?.summaryText ?? "PROCESOS DB OK",
             satAfectados: satProcesosInfo?.affected ?? [],
             peorPct,
             tiempoImagenMs,
@@ -296,7 +296,7 @@ async function guardarMetricasEnvio({
             sev: status?.sev ?? "verde",
             porcentajeError: status?.pctMax,
             afectados: status?.afectados ?? [],
-            satResumen: satProcesosInfo?.summaryText ?? "SAT OK",
+            satResumen: satProcesosInfo?.summaryText ?? "PROCESOS DB OK",
             satAfectados: satProcesosInfo?.affected ?? [],
             usoCpu: status?.cpu,
             usoRam: status?.ram,

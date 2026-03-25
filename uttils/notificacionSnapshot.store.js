@@ -108,7 +108,7 @@ export async function guardarAlertaNotificacion({
     const resumenPartes = [
         satResumen ? String(satResumen) : null,
         afectadosList.length ? `${afectadosList.length} micros afectados` : null,
-        satAfectadosList.length ? `${satAfectadosList.length} incidentes SAT` : null,
+        satAfectadosList.length ? `${satAfectadosList.length} incidentes procesos DB` : null,
     ].filter(Boolean);
 
     const queFalloPartes = [

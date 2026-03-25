@@ -137,7 +137,7 @@ export function analyzeSatProcesos(rows) {
         top,
         summaryText: affected.length
             ? top.map((x) => `${x.servidor} ${x.reason}`).join(" | ")
-            : `SAT OK ${normalized.length}/${normalized.length}`,
+            : `PROCESOS DB OK ${normalized.length}/${normalized.length}`,
     };
 }
 
@@ -146,7 +146,7 @@ export async function obtenerSatProcesosInfoSafe(fetchProcesos) {
         return analyzeSatProcesos(await fetchProcesos());
     } catch (error) {
         const incident = {
-            servidor: "sat",
+            servidor: "procesosdb",
             sev: "rojo",
             reason: "ERROR",
             procesos: 0,
@@ -166,7 +166,7 @@ export async function obtenerSatProcesosInfoSafe(fetchProcesos) {
             incidents: [],
             affected: [incident],
             top: [incident],
-            summaryText: "sat ERROR",
+            summaryText: "procesosdb ERROR",
         };
     }
 }
