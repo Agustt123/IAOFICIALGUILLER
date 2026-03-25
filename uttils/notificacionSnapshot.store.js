@@ -107,11 +107,13 @@ export async function guardarAlertaNotificacion({
         ? satAfectados.filter((item) => String(item?.sev || "verde") !== "verde")
         : [];
 
-    const microsFallando = afectadosList.map((item) => `${item.micro} PROC ${item.streak}`);
+    const microsFallando = afectadosList.map(
+        (item) => `${item.micro}: fallas consecutivas (${item.streak})`
+    );
     const procesosDbFallando = satAfectadosList.map((item) => {
         const servidor = String(item?.servidor || "procesosdb");
         const reason = item?.reason ? String(item.reason) : String(item?.sev || "alerta");
-        return `${servidor} ${reason}`;
+        return `${servidor}: ${reason}`;
     });
 
     const fallos = [...procesosDbFallando, ...microsFallando];
@@ -123,7 +125,6 @@ export async function guardarAlertaNotificacion({
         did_notificaciones: Number(didNotificaciones ?? 0),
         autofecha: autofecha ?? new Date(),
         sev: sev ? String(sev) : "verde",
-        color: sev ? String(sev) : "verde",
         porcentaje_error:
             porcentajeError === null || porcentajeError === undefined
                 ? null

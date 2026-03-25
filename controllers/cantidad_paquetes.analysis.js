@@ -69,16 +69,13 @@ function severityFromSatRow(row) {
     const maxSeg = Number(row.maxSegundos ?? 0);
     const avgSeg = Number(row.promedioSegundos ?? 0);
     const latMs = Number(row.latenciaMs ?? 0);
-    const isConjunto = isSatConjuntoRow(row);
 
     if (maxSeg >= 15) return "rojo";
-    if (!isConjunto && procesos >= 8) return "rojo";
+    if (procesos >= 20) return "rojo";
     if (maxSeg >= 8 || avgSeg >= 5) return "naranja";
-    if (!isConjunto && procesos >= 5) return "naranja";
-    if (isConjunto && procesos >= 20 && maxSeg >= 2) return "naranja";
+    if (procesos >= 10) return "naranja";
     if (maxSeg >= 4 || avgSeg >= 2 || latMs >= 1500) return "amarillo";
-    if (!isConjunto && procesos >= 3) return "amarillo";
-    if (isConjunto && procesos >= 15 && maxSeg >= 1) return "amarillo";
+    if (procesos >= 5) return "amarillo";
     return "verde";
 }
 
@@ -88,9 +85,9 @@ function satReasonForRow(row, sev) {
     if (sev === "rojo" || sev === "naranja") {
         if ((row.maxSegundos ?? 0) > 0) return `MAX ${shortSecondsLabel(row.maxSegundos)}`;
         if ((row.promedioSegundos ?? 0) > 0) return `AVG ${shortSecondsLabel(row.promedioSegundos)}`;
-        if (!isSatConjuntoRow(row) && row.procesos > 0) return `PROC ${row.procesos}`;
+        if (row.procesos > 0) return `PROCESOS ALTOS (${row.procesos})`;
     }
-    if (!isSatConjuntoRow(row) && row.procesos >= 3) return `PROC ${row.procesos}`;
+    if (row.procesos >= 5) return `PROCESOS ALTOS (${row.procesos})`;
     if ((row.latenciaMs ?? 0) >= 1500) return `LAT ${Math.round(row.latenciaMs)}ms`;
     if ((row.maxSegundos ?? 0) > 0) return `MAX ${shortSecondsLabel(row.maxSegundos)}`;
     if (isSatConjuntoRow(row) && row.procesos > 0) return `TOTAL ${row.procesos}`;
