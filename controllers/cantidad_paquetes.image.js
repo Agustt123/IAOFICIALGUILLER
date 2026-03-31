@@ -51,6 +51,12 @@ function fitFontPxForText(ctx, text, maxWidth, startPx, minPx, fontFamily, weigh
     return minPx;
 }
 
+function formatDatabaseSummaryText(summaryText) {
+    const text = String(summaryText || "").trim();
+    if (!text) return "OK";
+    return text.replace(/^PROCESOS DB\s*/i, "").trim() || "OK";
+}
+
 function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
     const status = buildStatusSummary({ monitoreo, metricas, satProcesosInfo });
     const style = severityStyle(status.sev);
@@ -76,7 +82,7 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
     if (pctMaxName && status.pctMax !== null) {
         parts.push(`${pctMaxName} ${Math.round(status.pctMax)}%`);
     }
-    if (status.maxStreak > 0 && status.afectados.length) {
+    if (status.microsSev !== "verde" && status.maxStreak > 0 && status.afectados.length) {
         parts.push(
             status.afectados
                 .slice(0, 6)
@@ -84,8 +90,8 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
                 .join(", ")
         );
     }
-    if (satProcesosInfo?.affectedCount) {
-        parts.push(`PROCESOS DB ${satProcesosInfo.summaryText}`);
+    if (status.satSev !== "verde" && satProcesosInfo?.affectedCount) {
+        parts.push(`BASE DE DATOS ${formatDatabaseSummaryText(satProcesosInfo.summaryText)}`);
     }
 
     if (parts.length) {
@@ -234,14 +240,19 @@ export function generarImagenResumenBuffer({
     const lineY = metricsY + 25;
     drawCenteredPartsLine(parts, lineY, parts.length > 6 ? 16 : 18);
 
-    const satParts = satProcesosInfo?.top?.length
+    const databaseParts =
+        status.satSev !== "verde" && satProcesosInfo?.top?.length
         ? satProcesosInfo.top.map((x) => ({
-              text: `PROCESOS DB ${x.servidor} ${x.reason}`,
+              text: `BASE DE DATOS ${x.servidor} ${x.reason}`,
               color: satSeverityColor(x.sev),
           }))
-        : [{ text: "PROCESOS DB OK", color: "#22c55e" }];
+        : [{ text: "BASE DE DATOS OK", color: "#22c55e" }];
 
-    drawCenteredPartsLine(satParts, lineY + 34, satParts.length > 2 ? 14 : 16);
+    drawCenteredPartsLine(
+        databaseParts,
+        lineY + 34,
+        databaseParts.length > 2 ? 14 : 16
+    );
 
     return { buf: canvas.toBuffer("image/png"), status };
 }

@@ -1,5 +1,7 @@
 import { bucket1000, computeConsecutiveFails, toNum } from "./cantidad_paquetes.data.js";
 
+const focusState = new Map();
+
 export function severityRank(s) {
     if (s === "rojo") return 3;
     if (s === "naranja") return 2;
@@ -60,6 +62,32 @@ function isSatConjuntoRow(row) {
     return String(row?.servidor || "").toLowerCase() === "conjunto";
 }
 
+function buildFocusSignature(parts) {
+    return parts.filter(Boolean).join("|") || "ok";
+}
+
+function gateSeverityAfterThreeHits(focusKey, rawSev, signature) {
+    const currentSignature = rawSev === "verde" ? "ok" : String(signature || rawSev);
+    const previous = focusState.get(focusKey);
+
+    if (rawSev === "verde") {
+        focusState.set(focusKey, { signature: currentSignature, hits: 0, rawSev });
+        return { sev: "verde", hits: 0 };
+    }
+
+    const hits =
+        previous && previous.signature === currentSignature && previous.rawSev === rawSev
+            ? previous.hits + 1
+            : 1;
+
+    focusState.set(focusKey, { signature: currentSignature, hits, rawSev });
+
+    return {
+        sev: hits >= 3 ? rawSev : "verde",
+        hits,
+    };
+}
+
 function severityFromSatRow(row) {
     if (!row.ok || row.error || (row.codigoHttp !== null && row.codigoHttp >= 500)) {
         return "rojo";
@@ -70,12 +98,22 @@ function severityFromSatRow(row) {
     const avgSeg = Number(row.promedioSegundos ?? 0);
     const latMs = Number(row.latenciaMs ?? 0);
 
+    if (isSatConjuntoRow(row)) {
+        if (maxSeg >= 15) return "rojo";
+        if (procesos >= 50) return "rojo";
+        if (maxSeg >= 8 || avgSeg >= 5) return "naranja";
+        if (procesos >= 40) return "naranja";
+        if (maxSeg >= 4 || avgSeg >= 2 || latMs >= 1500) return "amarillo";
+        if (procesos >= 30) return "amarillo";
+        return "verde";
+    }
+
     if (maxSeg >= 15) return "rojo";
     if (procesos >= 20) return "rojo";
     if (maxSeg >= 8 || avgSeg >= 5) return "naranja";
-    if (procesos >= 10) return "naranja";
+    if (procesos >= 15) return "naranja";
     if (maxSeg >= 4 || avgSeg >= 2 || latMs >= 1500) return "amarillo";
-    if (procesos >= 5) return "amarillo";
+    if (procesos > 10) return "amarillo";
     return "verde";
 }
 
@@ -206,9 +244,40 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
     const { cpu, ram, disk, pctMax } = summarizeMetricas(metricas);
-    const metricSev = severityFromMetricMax(pctMax);
-    const microsSev = severityFromMaxStreak(maxStreak);
-    const satSev = satProcesosInfo?.sev ?? "verde";
+    const rawMetricSev = severityFromMetricMax(pctMax);
+    const rawMicrosSev = severityFromMaxStreak(maxStreak);
+    const rawSatSev = satProcesosInfo?.sev ?? "verde";
+
+    const metricFocus = gateSeverityAfterThreeHits(
+        "server",
+        rawMetricSev,
+        buildFocusSignature([
+            rawMetricSev,
+            cpu === null ? null : `cpu:${Math.round(cpu)}`,
+            ram === null ? null : `ram:${Math.round(ram)}`,
+            disk === null ? null : `disk:${Math.round(disk)}`,
+        ])
+    );
+    const microsFocus = gateSeverityAfterThreeHits(
+        "microservices",
+        rawMicrosSev,
+        buildFocusSignature([
+            rawMicrosSev,
+            ...afectados.map((x) => `${x.micro}:${x.streak}`),
+        ])
+    );
+    const dbFocus = gateSeverityAfterThreeHits(
+        "database",
+        rawSatSev,
+        buildFocusSignature([
+            rawSatSev,
+            ...(satProcesosInfo?.affected ?? []).map((x) => `${x.servidor}:${x.reason}:${x.sev}`),
+        ])
+    );
+
+    const metricSev = metricFocus.sev;
+    const microsSev = microsFocus.sev;
+    const satSev = dbFocus.sev;
 
     return {
         cpu,
@@ -220,6 +289,12 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         metricSev,
         microsSev,
         satSev,
+        rawMetricSev,
+        rawMicrosSev,
+        rawSatSev,
+        serverAlertHits: metricFocus.hits,
+        microservicesAlertHits: microsFocus.hits,
+        databaseAlertHits: dbFocus.hits,
         sev: pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satSev),
     };
 }
