@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { enviarResumenCantidadPush, obtenerCantidad } from "../controllers/cantidad_paquetes.controller.js";
+import {
+    enviarResumenCantidadPush,
+    obtenerCantidad,
+    obtenerUltimaAlertaResumenV2,
+    obtenerPeorPctResumenV2,
+} from "../controllers/cantidad_paquetes.controller.js";
 
 const cantidad = Router();
 
@@ -19,5 +24,7 @@ cantidad.get('/', async (req, res) => {
 });
 
 cantidad.post('/push', enviarResumenCantidadPush);
+cantidad.get('/alerta/v2', obtenerUltimaAlertaResumenV2);
+cantidad.get('/peor-pct/v2', obtenerPeorPctResumenV2);
 
 export default cantidad;
