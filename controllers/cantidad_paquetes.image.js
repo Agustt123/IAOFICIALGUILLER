@@ -26,13 +26,24 @@ function monthNameEsFromFecha(fechaYYYYMMDD) {
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
+function formatFechaCorta(fechaYYYYMMDD) {
+    const d = new Date(`${fechaYYYYMMDD}T00:00:00Z`);
+    return new Intl.DateTimeFormat("es-AR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: "UTC",
+    }).format(d);
+}
+
 function fmtPct(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return "--";
     return `${Math.round(n)}%`;
 }
 
-function metricColorByPct(pct) {
+function metricColorByPct(pct, highlight = false) {
+    if (!highlight) return "#cbd5e1";
     const v = Number(pct);
     if (!Number.isFinite(v)) return "#94a3b8";
     if (v >= 80) return "#dc2626";
@@ -41,7 +52,8 @@ function metricColorByPct(pct) {
     return "#cbd5e1";
 }
 
-function cpuColorByPct(pct) {
+function cpuColorByPct(pct, highlight = false) {
+    if (!highlight) return "#cbd5e1";
     const v = Number(pct);
     if (!Number.isFinite(v)) return "#94a3b8";
     if (v >= 95) return "#dc2626";
@@ -50,7 +62,8 @@ function cpuColorByPct(pct) {
     return "#cbd5e1";
 }
 
-function diskColorByPct(pct) {
+function diskColorByPct(pct, highlight = false) {
+    if (!highlight) return "#cbd5e1";
     const v = Number(pct);
     if (!Number.isFinite(v)) return "#94a3b8";
     if (v >= 95) return "#dc2626";
@@ -94,22 +107,20 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
 
     ctx.fillStyle = style.fg;
     ctx.font = 'bold 22px "DejaVuSans"';
-    ctx.fillText(status.sev === "verde" ? "TODO OK" : style.label, 22, 40);
+    ctx.fillText(status.sev === "verde" ? "TODO OK" : "ALERTA", 22, 40);
 
     const parts = [];
-    if (pctMaxName && status.pctMax !== null) {
+    if (status.serverSev !== "verde") {
+        parts.push(status.serverSummary);
+    }
+    if (status.microservicesSev !== "verde") {
+        parts.push(`MICROSERVICIOS ${status.microservicesSummary}`);
+    }
+    if (status.databaseSev !== "verde") {
+        parts.push(`BASE DE DATOS ${formatDatabaseSummaryText(status.databaseSummary)}`);
+    }
+    if (!parts.length && pctMaxName && status.pctMax !== null) {
         parts.push(`${pctMaxName} ${Math.round(status.pctMax)}%`);
-    }
-    if (status.microsSev !== "verde" && status.maxStreak > 0 && status.afectados.length) {
-        parts.push(
-            status.afectados
-                .slice(0, 6)
-                .map((x) => `${x.micro}(${x.streak})`)
-                .join(", ")
-        );
-    }
-    if (status.satSev !== "verde" && satProcesosInfo?.affectedCount) {
-        parts.push(`BASE DE DATOS ${formatDatabaseSummaryText(satProcesosInfo.summaryText)}`);
     }
 
     if (parts.length) {
@@ -149,9 +160,15 @@ export function generarImagenResumenBuffer({
 
     const year = String(fecha).slice(0, 4);
     const monthName = monthNameEsFromFecha(fecha);
+    const fechaLabel = formatFechaCorta(fecha);
 
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, cardY + 45, cardW - 80, 2);
+    ctx.font = 'bold 18px "DejaVuSans"';
+    ctx.fillStyle = "#cbd5e1";
+    ctx.textAlign = "center";
+    ctx.fillText(`Fecha ${fechaLabel}`, cardX + cardW / 2, cardY + 32);
+    ctx.textAlign = "left";
 
     function drawStatCard({ x, y, w, h, label, valueText }) {
         ctx.save();
@@ -207,11 +224,21 @@ export function generarImagenResumenBuffer({
     const metricsY = bottomY + bottomBoxH + 22;
     ctx.fillStyle = "#1f2a44";
     ctx.fillRect(cardX + 40, metricsY - 18, cardW - 80, 2);
+    const highlightServerMetrics = status.serverSev !== "verde";
 
     const parts = [
-        { text: `CPU ${fmtPct(metricas?.usoCpu)}`, color: cpuColorByPct(metricas?.usoCpu) },
-        { text: `RAM ${fmtPct(metricas?.usoRam)}`, color: metricColorByPct(metricas?.usoRam) },
-        { text: `DISCO ${fmtPct(metricas?.usoDisco)}`, color: diskColorByPct(metricas?.usoDisco) },
+        {
+            text: `CPU ${fmtPct(metricas?.usoCpu)}`,
+            color: cpuColorByPct(metricas?.usoCpu, highlightServerMetrics),
+        },
+        {
+            text: `RAM ${fmtPct(metricas?.usoRam)}`,
+            color: metricColorByPct(metricas?.usoRam, highlightServerMetrics),
+        },
+        {
+            text: `DISCO ${fmtPct(metricas?.usoDisco)}`,
+            color: diskColorByPct(metricas?.usoDisco, highlightServerMetrics),
+        },
     ];
 
     if (metricas?.latenciaMs !== null && metricas?.latenciaMs !== undefined) {
@@ -259,7 +286,7 @@ export function generarImagenResumenBuffer({
     drawCenteredPartsLine(parts, lineY, parts.length > 6 ? 16 : 18);
 
     const databaseParts =
-        status.satSev !== "verde" && satProcesosInfo?.top?.length
+        status.databaseSev !== "verde" && satProcesosInfo?.top?.length
         ? satProcesosInfo.top.map((x) => ({
               text: `BASE DE DATOS ${x.servidor} ${x.reason}`,
               color: satSeverityColor(x.sev),
@@ -270,6 +297,22 @@ export function generarImagenResumenBuffer({
         databaseParts,
         lineY + 34,
         databaseParts.length > 2 ? 14 : 16
+    );
+
+    const microservicesParts =
+        status.microservicesSev !== "verde" && status.afectados?.length
+            ? [
+                  {
+                      text: `MICROSERVICIOS ${status.microservicesSummary}`,
+                      color: "#f97316",
+                  },
+              ]
+            : [{ text: "MICROSERVICIOS OK", color: "#22c55e" }];
+
+    drawCenteredPartsLine(
+        microservicesParts,
+        lineY + 68,
+        microservicesParts[0].text.length > 50 ? 14 : 16
     );
 
     return { buf: canvas.toBuffer("image/png"), status };

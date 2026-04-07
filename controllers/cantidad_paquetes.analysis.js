@@ -75,13 +75,19 @@ function buildFocusSignature(parts) {
     return parts.filter(Boolean).join("|") || "ok";
 }
 
-function gateSeverityAfterThreeHits(focusKey, rawSev, signature) {
+function gateSeverityAfterThreeHits(focusKey, rawSev, signature, options = {}) {
     const currentSignature = rawSev === "verde" ? "ok" : String(signature || rawSev);
     const previous = focusState.get(focusKey);
+    const immediate = options?.immediate === true;
 
     if (rawSev === "verde") {
         focusState.set(focusKey, { signature: currentSignature, hits: 0, rawSev });
-        return { sev: "verde", hits: 0 };
+        return { sev: "verde", hits: 0, signature: currentSignature };
+    }
+
+    if (immediate) {
+        focusState.set(focusKey, { signature: currentSignature, hits: 1, rawSev });
+        return { sev: rawSev, hits: 1, signature: currentSignature };
     }
 
     const hits =
@@ -94,6 +100,7 @@ function gateSeverityAfterThreeHits(focusKey, rawSev, signature) {
     return {
         sev: hits >= 3 ? rawSev : "verde",
         hits,
+        signature: currentSignature,
     };
 }
 
@@ -249,10 +256,47 @@ export function summarizeMetricas(metricas) {
     };
 }
 
+function activeMetricItems(cpu, ram, disk) {
+    const items = [
+        { key: "CPU", value: cpu, sev: severityFromMetricMax(cpu) },
+        { key: "RAM", value: ram, sev: severityFromMetricMax(ram) },
+        { key: "DISCO", value: disk, sev: severityFromDiskPct(disk) },
+    ];
+
+    return items.filter((item) => item.value !== null && item.sev !== "verde");
+}
+
+function formatMetricSummary(items) {
+    if (!items.length) return "SERVIDOR OK";
+    return items.map((item) => `${item.key} ${Math.round(item.value)}%`).join(" | ");
+}
+
+function buildServerAlertKey(items) {
+    if (!items.length) return "ok";
+    return items.map((item) => `${item.key}:${item.sev}`).join("|");
+}
+
+function buildMicroservicesSummary(afectados, maxStreak) {
+    if (!afectados.length || maxStreak <= 0) return "MICROSERVICIOS OK";
+    return afectados
+        .slice(0, 4)
+        .map((item) => `${item.micro}(${item.streak})`)
+        .join(" | ");
+}
+
+function buildDatabaseSummary(satProcesosInfo) {
+    if (!satProcesosInfo?.affected?.length) return "BASE DE DATOS OK";
+    return satProcesosInfo.affected
+        .slice(0, 3)
+        .map((item) => `${item.servidor} ${item.reason}`)
+        .join(" | ");
+}
+
 export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
     const { cpu, ram, disk, pctMax } = summarizeMetricas(metricas);
+    const activeServerMetrics = activeMetricItems(cpu, ram, disk);
     const rawMetricSev = [severityFromMetricMax(cpu), severityFromMetricMax(ram), severityFromDiskPct(disk)]
         .reduce((worst, current) => pickWorstSeverity(worst, current), "verde");
     const rawMicrosSev = severityFromMaxStreak(maxStreak);
@@ -261,12 +305,8 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const metricFocus = gateSeverityAfterThreeHits(
         "server",
         rawMetricSev,
-        buildFocusSignature([
-            rawMetricSev,
-            cpu === null ? null : `cpu:${Math.round(cpu)}`,
-            ram === null ? null : `ram:${Math.round(ram)}`,
-            disk === null ? null : `disk:${Math.round(disk)}`,
-        ])
+        buildServerAlertKey(activeServerMetrics),
+        { immediate: rawMetricSev === "rojo" }
     );
     const microsFocus = gateSeverityAfterThreeHits(
         "microservices",
@@ -274,7 +314,8 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         buildFocusSignature([
             rawMicrosSev,
             ...afectados.map((x) => `${x.micro}:${x.streak}`),
-        ])
+        ]),
+        { immediate: rawMicrosSev === "rojo" }
     );
     const dbFocus = gateSeverityAfterThreeHits(
         "database",
@@ -282,12 +323,27 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         buildFocusSignature([
             rawSatSev,
             ...(satProcesosInfo?.affected ?? []).map((x) => `${x.servidor}:${x.reason}:${x.sev}`),
-        ])
+        ]),
+        {
+            immediate:
+                rawSatSev === "rojo" &&
+                (satProcesosInfo?.affected ?? []).some((item) => item?.immediate === true),
+        }
     );
 
-    const metricSev = metricFocus.sev;
-    const microsSev = microsFocus.sev;
-    const satSev = dbFocus.sev;
+    const serverSev = metricFocus.sev;
+    const microservicesSev = microsFocus.sev;
+    const databaseSev = dbFocus.sev;
+    const hasAlert =
+        serverSev !== "verde" || microservicesSev !== "verde" || databaseSev !== "verde";
+    const focosActivos = [
+        serverSev !== "verde" ? "Servidor" : null,
+        microservicesSev !== "verde" ? "Microservicios" : null,
+        databaseSev !== "verde" ? "Base de datos" : null,
+    ].filter(Boolean);
+    const serverSummary = formatMetricSummary(activeServerMetrics);
+    const microservicesSummary = buildMicroservicesSummary(afectados, maxStreak);
+    const databaseSummary = buildDatabaseSummary(satProcesosInfo);
 
     return {
         cpu,
@@ -296,16 +352,24 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         pctMax,
         maxStreak,
         afectados,
-        metricSev,
-        microsSev,
-        satSev,
+        metricSev: serverSev,
+        microsSev: microservicesSev,
+        satSev: databaseSev,
+        serverSev,
+        microservicesSev,
+        databaseSev,
         rawMetricSev,
         rawMicrosSev,
         rawSatSev,
         serverAlertHits: metricFocus.hits,
         microservicesAlertHits: microsFocus.hits,
         databaseAlertHits: dbFocus.hits,
-        sev: pickWorstSeverity(pickWorstSeverity(metricSev, microsSev), satSev),
+        serverSummary,
+        microservicesSummary,
+        databaseSummary,
+        focosActivos,
+        hasAlert,
+        sev: hasAlert ? "rojo" : "verde",
     };
 }
 
@@ -336,6 +400,33 @@ export function buildLogicalPayload({
     status,
     satProcesosInfo,
 }) {
+    const serverFocus =
+        status.serverSev === "verde"
+            ? { sev: "verde" }
+            : {
+                  sev: "rojo",
+                  key: buildServerAlertKey(activeMetricItems(status.cpu, status.ram, status.disk)),
+              };
+    const microservicesFocus =
+        status.microservicesSev === "verde"
+            ? { sev: "verde" }
+            : {
+                  sev: "rojo",
+                  afectados: status.afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
+              };
+    const databaseFocus =
+        status.databaseSev === "verde"
+            ? { sev: "verde" }
+            : {
+                  sev: "rojo",
+                  affectedCount: satProcesosInfo.affectedCount,
+                  top: satProcesosInfo.top.map((x) => ({
+                      servidor: x.servidor,
+                      reason: x.reason,
+                      sev: x.sev,
+                  })),
+              };
+
     return {
         fecha: String(fecha),
         mes: String(mes),
@@ -343,25 +434,10 @@ export function buildLogicalPayload({
         mesBucket: bucket1000(cantidadMes),
         anioBucket: bucket1000(anioCantidad),
         sev: status.sev,
-        maxStreak: status.maxStreak,
-        afectados: status.afectados.map((x) => ({ micro: x.micro, streak: x.streak })),
-        metricas: {
-            usoCpu: status.cpu,
-            usoRam: status.ram,
-            usoDisco: status.disk,
-            pctMax: status.pctMax,
-        },
-        sat: {
-            sev: satProcesosInfo.sev,
-            affectedCount: satProcesosInfo.affectedCount,
-            top: satProcesosInfo.top.map((x) => ({
-                servidor: x.servidor,
-                sev: x.sev,
-                reason: x.reason,
-                procesosBucket: Number(x.procesos ?? 0),
-                maxSegBucket:
-                    x.maxSegundos === null ? null : Math.floor(Number(x.maxSegundos)),
-            })),
+        focos: {
+            servidor: serverFocus,
+            microservicios: microservicesFocus,
+            baseDeDatos: databaseFocus,
         },
     };
 }
