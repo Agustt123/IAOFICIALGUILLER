@@ -16,8 +16,17 @@ export function pickWorstSeverity(a, b) {
 export function severityFromMetricMax(pctMax) {
     const v = Number(pctMax);
     if (!Number.isFinite(v)) return "amarillo";
-    if (v >= 80) return "rojo";
-    if (v >= 70) return "naranja";
+    if (v >= 95) return "rojo";
+    if (v >= 90) return "naranja";
+    if (v >= 50) return "amarillo";
+    return "verde";
+}
+
+export function severityFromDiskPct(pct) {
+    const v = Number(pct);
+    if (!Number.isFinite(v)) return "amarillo";
+    if (v >= 95) return "rojo";
+    if (v >= 90) return "naranja";
     if (v >= 50) return "amarillo";
     return "verde";
 }
@@ -244,7 +253,8 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
     const { cpu, ram, disk, pctMax } = summarizeMetricas(metricas);
-    const rawMetricSev = severityFromMetricMax(pctMax);
+    const rawMetricSev = [severityFromMetricMax(cpu), severityFromMetricMax(ram), severityFromDiskPct(disk)]
+        .reduce((worst, current) => pickWorstSeverity(worst, current), "verde");
     const rawMicrosSev = severityFromMaxStreak(maxStreak);
     const rawSatSev = satProcesosInfo?.sev ?? "verde";
 

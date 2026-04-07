@@ -375,7 +375,8 @@ function buildPushMessage({
             cuerpo,
         }),
         android: {
-
+            // Correcto por ahora: no agregar `notification` dentro de `android`.
+            // La app mobile toma estos datos desde `data`.
             priority: "HIGH",
         },
     };

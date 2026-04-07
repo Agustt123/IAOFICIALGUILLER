@@ -41,6 +41,24 @@ function metricColorByPct(pct) {
     return "#cbd5e1";
 }
 
+function cpuColorByPct(pct) {
+    const v = Number(pct);
+    if (!Number.isFinite(v)) return "#94a3b8";
+    if (v >= 95) return "#dc2626";
+    if (v >= 90) return "#f97316";
+    if (v >= 50) return "#facc15";
+    return "#cbd5e1";
+}
+
+function diskColorByPct(pct) {
+    const v = Number(pct);
+    if (!Number.isFinite(v)) return "#94a3b8";
+    if (v >= 95) return "#dc2626";
+    if (v >= 90) return "#f97316";
+    if (v >= 50) return "#facc15";
+    return "#cbd5e1";
+}
+
 function fitFontPxForText(ctx, text, maxWidth, startPx, minPx, fontFamily, weight = "bold") {
     let px = startPx;
     while (px > minPx) {
@@ -191,9 +209,9 @@ export function generarImagenResumenBuffer({
     ctx.fillRect(cardX + 40, metricsY - 18, cardW - 80, 2);
 
     const parts = [
-        { text: `CPU ${fmtPct(metricas?.usoCpu)}`, color: metricColorByPct(metricas?.usoCpu) },
+        { text: `CPU ${fmtPct(metricas?.usoCpu)}`, color: cpuColorByPct(metricas?.usoCpu) },
         { text: `RAM ${fmtPct(metricas?.usoRam)}`, color: metricColorByPct(metricas?.usoRam) },
-        { text: `DISCO ${fmtPct(metricas?.usoDisco)}`, color: metricColorByPct(metricas?.usoDisco) },
+        { text: `DISCO ${fmtPct(metricas?.usoDisco)}`, color: diskColorByPct(metricas?.usoDisco) },
     ];
 
     if (metricas?.latenciaMs !== null && metricas?.latenciaMs !== undefined) {
