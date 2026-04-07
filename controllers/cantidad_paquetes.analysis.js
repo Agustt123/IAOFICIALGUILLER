@@ -15,19 +15,15 @@ export function pickWorstSeverity(a, b) {
 
 export function severityFromMetricMax(pctMax) {
     const v = Number(pctMax);
-    if (!Number.isFinite(v)) return "amarillo";
-    if (v >= 95) return "rojo";
-    if (v >= 90) return "naranja";
-    if (v >= 50) return "amarillo";
+    if (!Number.isFinite(v)) return "verde";
+    if (v >= 90) return "rojo";
     return "verde";
 }
 
 export function severityFromDiskPct(pct) {
     const v = Number(pct);
-    if (!Number.isFinite(v)) return "amarillo";
-    if (v >= 95) return "rojo";
-    if (v >= 90) return "naranja";
-    if (v >= 50) return "amarillo";
+    if (!Number.isFinite(v)) return "verde";
+    if (v >= 90) return "rojo";
     return "verde";
 }
 
