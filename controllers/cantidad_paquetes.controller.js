@@ -75,11 +75,24 @@ function formatPct(value) {
     return Number.isFinite(n) ? `${Math.round(n)}%` : null;
 }
 
+function formatDateTimeEs(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+}
+
 function buildServerFocus(detail) {
     const cpu = detail?.uso_cpu ?? detail?.usoCpu ?? null;
     const ram = detail?.uso_ram ?? detail?.usoRam ?? null;
     const disk = detail?.uso_disco ?? detail?.usoDisco ?? null;
     const pctMax = detail?.pct_max ?? detail?.pctMax ?? null;
+    const sev = String(detail?.sev_servidor ?? detail?.serverSev ?? detail?.sev ?? "verde");
 
     const metrics = [
         cpu !== null && cpu !== undefined ? `CPU ${formatPct(cpu)}` : null,
@@ -89,7 +102,7 @@ function buildServerFocus(detail) {
 
     return {
         nombre: "Servidor",
-        sev: String(detail?.sev ?? "verde"),
+        sev,
         resumen: metrics.length
             ? metrics.join(" | ")
             : pctMax !== null && pctMax !== undefined
@@ -104,13 +117,14 @@ function buildServerFocus(detail) {
     };
 }
 
-function buildDatabaseFocus(alerta, detail) {
+function buildDatabaseFocus(detail, fallbackAlerta = null) {
     const dbItems = normalizeArray(
-        alerta?.detalle_alerta?.procesos_db_afectados ??
         detail?.sat_afectados ??
-        detail?.satAfectados
+        detail?.satAfectados ??
+        fallbackAlerta?.detalle_alerta?.procesos_db_afectados
     );
-    const satResumen = detail?.sat_resumen ?? detail?.satResumen ?? alerta?.resumen_alerta ?? null;
+    const satResumen =
+        detail?.sat_resumen ?? detail?.satResumen ?? fallbackAlerta?.resumen_alerta ?? null;
     const sev = String(detail?.sat_sev ?? detail?.satSev ?? "verde");
 
     return {
@@ -129,9 +143,9 @@ function buildDatabaseFocus(alerta, detail) {
     };
 }
 
-function buildMicroservicesFocus(alerta, detail) {
-    const micros = normalizeArray(alerta?.detalle_alerta?.afectados ?? detail?.afectados);
-    const sev = micros.length > 0 ? String(detail?.sev ?? alerta?.sev ?? "verde") : "verde";
+function buildMicroservicesFocus(detail, fallbackAlerta = null) {
+    const micros = normalizeArray(detail?.afectados ?? fallbackAlerta?.detalle_alerta?.afectados);
+    const sev = String(detail?.sev_microservicios ?? detail?.microservicesSev ?? (micros.length > 0 ? detail?.sev : "verde") ?? "verde");
 
     return {
         nombre: "Microservicios",
@@ -150,41 +164,143 @@ function buildMicroservicesFocus(alerta, detail) {
     };
 }
 
-function buildAlertaResumenV2({ alerta, detalle }) {
+function buildEstadoActual(detalle = {}, fallbackAlerta = null) {
     const server = buildServerFocus(detalle);
-    const database = buildDatabaseFocus(alerta, detalle);
-    const microservices = buildMicroservicesFocus(alerta, detalle);
-
+    const database = buildDatabaseFocus(detalle, fallbackAlerta);
+    const microservices = buildMicroservicesFocus(detalle, fallbackAlerta);
     const focos = [server, database, microservices];
     const focosActivos = focos.filter((x) => x.sev !== "verde");
 
     return {
-        ok: true,
-        version: "v2",
-        alerta: {
-            id: alerta?.id ?? alerta?.did ?? null,
-            didNotificaciones:
-                alerta?.did_notificaciones ?? alerta?.didNotificaciones ?? detalle?.id ?? null,
-            titulo: alerta?.titulo ?? "Alerta de monitoreo",
-            sev: String(alerta?.sev ?? detalle?.sev ?? "verde"),
-            porcentajeError:
-                alerta?.porcentaje_error ?? alerta?.porcentajeError ?? detalle?.pct_max ?? null,
-            resumen: alerta?.resumen_alerta ?? alerta?.resumenAlerta ?? "Sin novedades",
-            queFallo: alerta?.que_fallo ?? alerta?.queFallo ?? null,
-            imageUrl: alerta?.image_url ?? alerta?.imageUrl ?? detalle?.image_url ?? detalle?.imageUrl ?? null,
-            token: alerta?.token ?? detalle?.token ?? null,
-            fecha: alerta?.autofecha ?? detalle?.autofecha ?? null,
-        },
-        estadoGeneral: {
-            sev: String(alerta?.sev ?? detalle?.sev ?? "verde"),
-            focosActivos: focosActivos.map((x) => x.nombre),
-            cantidadFocosActivos: focosActivos.length,
-        },
+        id: detalle?.id ?? detalle?.did ?? null,
+        fecha: detalle?.autofecha ?? null,
+        token: detalle?.token ?? null,
+        imageUrl: detalle?.image_url ?? detalle?.imageUrl ?? null,
+        sev: String(detalle?.sev ?? "verde"),
+        satSev: String(detalle?.sat_sev ?? detalle?.satSev ?? "verde"),
+        porcentajeError: detalle?.pct_max ?? detalle?.pctMax ?? null,
+        hayAlertaActiva: String(detalle?.sev ?? "verde") !== "verde",
+        focosActivos: focosActivos.map((x) => x.nombre),
+        cantidadFocosActivos: focosActivos.length,
         focos: {
             servidor: server,
             baseDeDatos: database,
             microservicios: microservices,
         },
+    };
+}
+
+function buildUltimaAlerta(alerta = {}) {
+    const detalle = alerta?.detalle_alerta ?? {};
+    return {
+        id: alerta?.id ?? alerta?.did ?? null,
+        didNotificaciones: alerta?.did_notificaciones ?? alerta?.didNotificaciones ?? null,
+        titulo: alerta?.titulo ?? "Alerta de monitoreo",
+        sev: String(alerta?.sev ?? "verde"),
+        porcentajeError: alerta?.porcentaje_error ?? alerta?.porcentajeError ?? null,
+        resumen: alerta?.resumen_alerta ?? alerta?.resumenAlerta ?? "Sin novedades",
+        queFallo: alerta?.que_fallo ?? alerta?.queFallo ?? null,
+        imageUrl: alerta?.image_url ?? alerta?.imageUrl ?? null,
+        token: alerta?.token ?? null,
+        fecha: alerta?.autofecha ?? null,
+        detalle: {
+            cosasFallando: normalizeArray(detalle?.cosas_fallando),
+            microservicios: normalizeArray(detalle?.afectados),
+            baseDeDatos: normalizeArray(detalle?.procesos_db_afectados),
+        },
+    };
+}
+
+function buildAlertaTextoCorto(alerta = {}) {
+    const detalle = alerta?.detalle ?? {};
+    const db = normalizeArray(detalle?.baseDeDatos);
+    const micros = normalizeArray(detalle?.microservicios);
+    const cosas = normalizeArray(detalle?.cosasFallando);
+
+    let focoPrincipal = "Sistema";
+    let resumen = "Se detectaron problemas de monitoreo.";
+    let queFallo = alerta?.queFallo || alerta?.resumen || "Se detecto un problema.";
+
+    const detalleSimple = {
+        servidor: "OK",
+        microservicios: "OK",
+        baseDeDatos: "OK",
+    };
+
+    if (db.length > 0) {
+        focoPrincipal = "Base de datos";
+        const item = db[0];
+        const servidor = item?.servidor || "produccion";
+        const reason = item?.reason || item?.sev || "ERROR";
+        resumen = "Se detectaron problemas en base de datos.";
+        queFallo = `Servidor ${servidor} con ${reason.toLowerCase()} en procesos DB.`;
+        detalleSimple.baseDeDatos = `${servidor} ${reason}`;
+    }
+
+    if (micros.length > 0) {
+        const microsText = micros
+            .slice(0, 2)
+            .map((item) => `${item?.micro || "micro"} (${item?.streak || 0})`)
+            .join(" | ");
+        if (focoPrincipal === "Sistema") {
+            focoPrincipal = "Microservicios";
+            resumen = "Se detectaron problemas en microservicios.";
+            queFallo = `Microservicios con fallas consecutivas: ${microsText}.`;
+        }
+        detalleSimple.microservicios = microsText;
+    }
+
+    if (focoPrincipal === "Sistema" && cosas.length > 0) {
+        resumen = "Se detectaron problemas de monitoreo.";
+        queFallo = String(cosas[0]);
+    }
+
+    return {
+        fecha: formatDateTimeEs(alerta?.fecha),
+        estado: "ALERTA",
+        color: "rojo",
+        focoPrincipal,
+        resumen,
+        queFallo,
+        detalle: detalleSimple,
+    };
+}
+
+function buildAlertaResumenV2({ alerta, detalle }) {
+    const estadoActual = buildEstadoActual(detalle ?? {}, alerta ?? null);
+    const ultimaAlerta = alerta && Object.keys(alerta).length ? buildUltimaAlerta(alerta) : null;
+    const alertaResumen = ultimaAlerta ? buildAlertaTextoCorto(ultimaAlerta) : null;
+
+    return {
+        ok: true,
+        version: "v2",
+        fecha: alertaResumen?.fecha ?? null,
+        estado: alertaResumen?.estado ?? (estadoActual.hayAlertaActiva ? "ALERTA" : "OK"),
+        color: alertaResumen?.color ?? (estadoActual.hayAlertaActiva ? "rojo" : "verde"),
+        focoPrincipal:
+            alertaResumen?.focoPrincipal ??
+            (estadoActual.hayAlertaActiva ? estadoActual.focosActivos[0] || "Sistema" : "Sin incidencias"),
+        resumen: alertaResumen?.resumen ?? (estadoActual.hayAlertaActiva ? "Hay una alerta activa." : "Monitoreo sin problemas."),
+        queFallo: alertaResumen?.queFallo ?? null,
+        detalle:
+            alertaResumen?.detalle ??
+            {
+                servidor: "OK",
+                microservicios: "OK",
+                baseDeDatos: "OK",
+            },
+        estadoActual,
+        ultimaAlerta: alertaResumen,
+        alertaActiva: estadoActual.hayAlertaActiva ? estadoActual : null,
+        alerta: alertaResumen,
+        estadoGeneral: {
+            sev: estadoActual.sev,
+            focosActivos: estadoActual.focosActivos,
+            cantidadFocosActivos: estadoActual.cantidadFocosActivos,
+            hayAlertaActiva: estadoActual.hayAlertaActiva,
+        },
+        focos: estadoActual.focos,
+        ultimaAlertaDetalle: ultimaAlerta,
     };
 }
 
@@ -442,7 +558,6 @@ async function guardarMetricasEnvio({
 
     try {
         await guardarSnapshotNotificacion({
-            autofecha: new Date(),
             cantidadDia,
             peorPct,
             tiempoImagenMs,
@@ -456,7 +571,6 @@ async function guardarMetricasEnvio({
 
     try {
         const detalleResponse = await guardarDetalleNotificacion({
-            autofecha: new Date(),
             token,
             imageUrl,
             fecha,
@@ -500,7 +614,6 @@ async function guardarMetricasEnvio({
     try {
         const alertaResponse = await guardarAlertaNotificacion({
             didNotificaciones,
-            autofecha: new Date(),
             token,
             imageUrl,
             sev: status?.sev ?? "verde",

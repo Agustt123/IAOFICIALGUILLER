@@ -8,13 +8,11 @@ const ALERTA_ENDPOINT =
     process.env.NOTIFICACION_ALERTA_URL ?? "http://dw.lightdata.app/monitoreo/alerta";
 
 export async function guardarSnapshotNotificacion({
-    autofecha,
     cantidadDia,
     peorPct,
     tiempoImagenMs,
 } = {}) {
     const payload = {
-        autofecha: autofecha ?? new Date(),
         cantidad_dia: Number(cantidadDia ?? 0),
         peor_pct: Number(peorPct ?? 0),
         tiempo_imagen_ms: Number(tiempoImagenMs ?? 0),
@@ -31,7 +29,6 @@ export async function guardarSnapshotNotificacion({
 }
 
 export async function guardarDetalleNotificacion({
-    autofecha,
     token,
     imageUrl,
     fecha,
@@ -54,7 +51,6 @@ export async function guardarDetalleNotificacion({
     tiempoImagenMs,
 } = {}) {
     const payload = {
-        autofecha: autofecha ?? new Date(),
         token: token ? String(token) : null,
         image_url: imageUrl ? String(imageUrl) : null,
         fecha: fecha ? String(fecha) : null,
@@ -89,7 +85,6 @@ export async function guardarDetalleNotificacion({
 
 export async function guardarAlertaNotificacion({
     didNotificaciones,
-    autofecha,
     token,
     imageUrl,
     sev,
@@ -123,7 +118,6 @@ export async function guardarAlertaNotificacion({
 
     const payload = {
         did_notificaciones: Number(didNotificaciones ?? 0),
-        autofecha: autofecha ?? new Date(),
         sev: sev ? String(sev) : "verde",
         porcentaje_error:
             porcentajeError === null || porcentajeError === undefined
