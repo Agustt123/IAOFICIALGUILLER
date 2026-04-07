@@ -272,35 +272,8 @@ function buildAlertaResumenV2({ alerta, detalle }) {
     const alertaResumen = ultimaAlerta ? buildAlertaTextoCorto(ultimaAlerta) : null;
 
     return {
-        ok: true,
-        version: "v2",
-        fecha: alertaResumen?.fecha ?? null,
-        estado: alertaResumen?.estado ?? (estadoActual.hayAlertaActiva ? "ALERTA" : "OK"),
-        color: alertaResumen?.color ?? (estadoActual.hayAlertaActiva ? "rojo" : "verde"),
-        focoPrincipal:
-            alertaResumen?.focoPrincipal ??
-            (estadoActual.hayAlertaActiva ? estadoActual.focosActivos[0] || "Sistema" : "Sin incidencias"),
-        resumen: alertaResumen?.resumen ?? (estadoActual.hayAlertaActiva ? "Hay una alerta activa." : "Monitoreo sin problemas."),
-        queFallo: alertaResumen?.queFallo ?? null,
-        detalle:
-            alertaResumen?.detalle ??
-            {
-                servidor: "OK",
-                microservicios: "OK",
-                baseDeDatos: "OK",
-            },
-        estadoActual,
+        alertaActiva: Boolean(estadoActual.hayAlertaActiva),
         ultimaAlerta: alertaResumen,
-        alertaActiva: estadoActual.hayAlertaActiva ? estadoActual : null,
-        alerta: alertaResumen,
-        estadoGeneral: {
-            sev: estadoActual.sev,
-            focosActivos: estadoActual.focosActivos,
-            cantidadFocosActivos: estadoActual.cantidadFocosActivos,
-            hayAlertaActiva: estadoActual.hayAlertaActiva,
-        },
-        focos: estadoActual.focos,
-        ultimaAlertaDetalle: ultimaAlerta,
     };
 }
 
