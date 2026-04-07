@@ -93,8 +93,8 @@ function buildServerFocus(detail) {
         resumen: metrics.length
             ? metrics.join(" | ")
             : pctMax !== null && pctMax !== undefined
-              ? `Uso maximo ${formatPct(pctMax)}`
-              : "Sin novedades",
+                ? `Uso maximo ${formatPct(pctMax)}`
+                : "Sin novedades",
         detalle: {
             cpu,
             ram,
@@ -107,8 +107,8 @@ function buildServerFocus(detail) {
 function buildDatabaseFocus(alerta, detail) {
     const dbItems = normalizeArray(
         alerta?.detalle_alerta?.procesos_db_afectados ??
-            detail?.sat_afectados ??
-            detail?.satAfectados
+        detail?.sat_afectados ??
+        detail?.satAfectados
     );
     const satResumen = detail?.sat_resumen ?? detail?.satResumen ?? alerta?.resumen_alerta ?? null;
     const sev = String(detail?.sat_sev ?? detail?.satSev ?? "verde");
@@ -119,9 +119,9 @@ function buildDatabaseFocus(alerta, detail) {
         resumen:
             dbItems.length > 0
                 ? dbItems
-                      .slice(0, 3)
-                      .map((item) => `${item?.servidor || "db"} ${item?.reason || item?.sev || ""}`.trim())
-                      .join(" | ")
+                    .slice(0, 3)
+                    .map((item) => `${item?.servidor || "db"} ${item?.reason || item?.sev || ""}`.trim())
+                    .join(" | ")
                 : satResumen || "Sin novedades",
         detalle: {
             afectados: dbItems,
@@ -139,9 +139,9 @@ function buildMicroservicesFocus(alerta, detail) {
         resumen:
             micros.length > 0
                 ? micros
-                      .slice(0, 4)
-                      .map((item) => `${item?.micro || "micro"} (${item?.streak || 0})`)
-                      .join(" | ")
+                    .slice(0, 4)
+                    .map((item) => `${item?.micro || "micro"} (${item?.streak || 0})`)
+                    .join(" | ")
                 : "Sin novedades",
         detalle: {
             afectados: micros,
@@ -375,10 +375,7 @@ function buildPushMessage({
             cuerpo,
         }),
         android: {
-            notification: {
-                imageUrl,
-                channelId: "silent_high",
-            },
+
             priority: "HIGH",
         },
     };
@@ -482,8 +479,7 @@ async function guardarMetricasEnvio({
         });
         didNotificaciones = Number(detalleResponse?.id || detalleResponse?.data?.id || 0);
         console.log(
-            `Notificacion detalle guardada. did_notificaciones=${didNotificaciones} sev=${
-                status?.sev ?? "verde"
+            `Notificacion detalle guardada. did_notificaciones=${didNotificaciones} sev=${status?.sev ?? "verde"
             }`
         );
     } catch (detalleError) {
@@ -517,8 +513,7 @@ async function guardarMetricasEnvio({
             pctMax: status?.pctMax,
         });
         console.log(
-            `Alerta guardada. did_notificaciones=${didNotificaciones} sev=${
-                status?.sev ?? "verde"
+            `Alerta guardada. did_notificaciones=${didNotificaciones} sev=${status?.sev ?? "verde"
             } respuesta=${JSON.stringify(alertaResponse)}`
         );
     } catch (alertaError) {
@@ -562,19 +557,19 @@ async function procesarEnvioResumen({
     const message =
         messageType === "push"
             ? buildPushMessage({
-                  token,
-                  ...resumen,
-                  status,
-                  imageUrl,
-                  titulo,
-                  cuerpo,
-              })
+                token,
+                ...resumen,
+                status,
+                imageUrl,
+                titulo,
+                cuerpo,
+            })
             : buildCronMessage({
-                  token,
-                  ...resumen,
-                  status,
-                  imageUrl,
-              });
+                token,
+                ...resumen,
+                status,
+                imageUrl,
+            });
 
     const fcmResponse = await enviarMensajeFcm(message);
     await setLastHash(token, currentHash);
