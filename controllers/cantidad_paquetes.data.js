@@ -64,12 +64,12 @@ export async function setLastHash(token, lastHash) {
 }
 
 export function todayLocalYYYYMMDD() {
-    const d = new Date();
-    d.setHours(d.getHours() - 3);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date());
 }
 
 export function bucket1000(n) {
