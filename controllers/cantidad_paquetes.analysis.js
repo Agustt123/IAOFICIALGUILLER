@@ -75,6 +75,7 @@ function gateSeverityAfterThreeHits(focusKey, rawSev, signature, options = {}) {
     const currentSignature = rawSev === "verde" ? "ok" : String(signature || rawSev);
     const previous = focusState.get(focusKey);
     const immediate = options?.immediate === true;
+    const progressiveByHits = options?.progressiveByHits === true;
 
     if (rawSev === "verde") {
         focusState.set(focusKey, { signature: currentSignature, hits: 0, rawSev });
@@ -92,6 +93,14 @@ function gateSeverityAfterThreeHits(focusKey, rawSev, signature, options = {}) {
             : 1;
 
     focusState.set(focusKey, { signature: currentSignature, hits, rawSev });
+
+    if (progressiveByHits) {
+        return {
+            sev: hits >= 3 ? "rojo" : hits === 2 ? "naranja" : "amarillo",
+            hits,
+            signature: currentSignature,
+        };
+    }
 
     return {
         sev: hits >= 3 ? rawSev : "verde",
@@ -130,7 +139,11 @@ function severityFromSatRow(row) {
 }
 
 function isImmediateDbIncident(row) {
-    return !row.ok || !!row.error || (row.codigoHttp !== null && row.codigoHttp >= 500);
+    return !row.ok || !!row.error;
+}
+
+function isProgressiveHttpDbIncident(row) {
+    return row.ok && !row.error && row.codigoHttp !== null && row.codigoHttp >= 500;
 }
 
 function satReasonForRow(row, sev) {
@@ -165,6 +178,7 @@ export function analyzeSatProcesos(rows) {
             codigoHttp: row.codigoHttp,
             error: row.error,
             immediate: isImmediateDbIncident(row),
+            progressiveHttp: isProgressiveHttpDbIncident(row),
             signature: `${row.servidor}|${reason}`,
         };
     });
@@ -185,6 +199,7 @@ export function analyzeSatProcesos(rows) {
     const affected = incidents.filter((x) => {
         if (x.sev === "verde") return false;
         if (x.immediate) return true;
+        if (x.progressiveHttp) return true;
         return (countsBySignature.get(x.signature) ?? 0) >= 3;
     });
 
@@ -324,6 +339,10 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
             immediate:
                 rawSatSev === "rojo" &&
                 (satProcesosInfo?.affected ?? []).some((item) => item?.immediate === true),
+            progressiveByHits:
+                rawSatSev === "rojo" &&
+                (satProcesosInfo?.affected ?? []).length > 0 &&
+                (satProcesosInfo?.affected ?? []).every((item) => item?.progressiveHttp === true),
         }
     );
 
