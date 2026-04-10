@@ -17,6 +17,7 @@ cron.schedule("* * * * *", async () => {
         console.log("⏱️ Cron resumen ejecutándose");
 
         const dia = todayLocalYYYYMMDD();
+        console.log(`[cron-resumen] dia_consultado=${dia}`);
 
         const dispositivos = await obtenerDispositivosActivos();
         console.log(`Dispositivos activos: ${dispositivos.length}`);

@@ -700,7 +700,7 @@ export const enviarResumenCantidadPush = async (req, res) => {
             return res.json({
                 ok: true,
                 skipped: true,
-                msg: "Sin cambios relevantes (a miles / severidad): no se envia notificacion.",
+                msg: "Sin cambios relevantes (a 10 mil / severidad): no se envia notificacion.",
                 logicalPayload: result.logicalPayload,
             });
         }
@@ -797,7 +797,7 @@ export async function generarYEnviarResumen({ token, dia }) {
     });
 
     if (result.skipped) {
-        console.log("Sin cambios relevantes (a miles / severidad): no se envia notificacion.");
+        console.log("Sin cambios relevantes (a 10 mil / severidad): no se envia notificacion.");
         return {
             skipped: true,
             logicalPayload: result.logicalPayload,

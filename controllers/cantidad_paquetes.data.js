@@ -64,18 +64,35 @@ export async function setLastHash(token, lastHash) {
 }
 
 export function todayLocalYYYYMMDD() {
-    return new Intl.DateTimeFormat("en-CA", {
+    const ahora = new Date();
+    const dia = new Intl.DateTimeFormat("en-CA", {
         timeZone: "America/Argentina/Buenos_Aires",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-    }).format(new Date());
+    }).format(ahora);
+    const horaAr = new Intl.DateTimeFormat("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    }).format(ahora);
+
+    console.log(
+        `[fecha-monitoreo] utc=${ahora.toISOString()} bsas="${horaAr}" dia_usado=${dia}`
+    );
+
+    return dia;
 }
 
 export function bucket1000(n) {
     const x = Number(n);
     if (!Number.isFinite(x)) return null;
-    return Math.floor(x / 1000);
+    return Math.floor(x / 10000);
 }
 
 export async function obtenerCantidad(dia) {

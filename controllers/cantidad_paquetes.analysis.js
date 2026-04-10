@@ -340,6 +340,10 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const serverSummary = formatMetricSummary(activeServerMetrics);
     const microservicesSummary = buildMicroservicesSummary(afectados, maxStreak);
     const databaseSummary = buildDatabaseSummary(satProcesosInfo);
+    const sev = pickWorstSeverity(
+        pickWorstSeverity(serverSev, microservicesSev),
+        databaseSev
+    );
 
     return {
         cpu,
@@ -365,7 +369,7 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         databaseSummary,
         focosActivos,
         hasAlert,
-        sev: hasAlert ? "rojo" : "verde",
+        sev,
     };
 }
 
