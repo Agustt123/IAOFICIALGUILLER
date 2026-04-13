@@ -258,7 +258,7 @@ function buildAlertaTextoCorto(alerta = {}) {
     return {
         fecha: formatDateTimeEs(alerta?.fecha),
         estado: "ALERTA",
-        color: "rojo",
+        color: alerta?.color || "rojo",
         focoPrincipal,
         resumen,
         queFallo,
