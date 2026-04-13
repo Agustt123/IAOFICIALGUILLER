@@ -25,7 +25,7 @@ export const registerDevice = async (req, res) => {
         1123787254: "Hola Agus",
         1140415803: "Hola Den",
     }
-    deviceStore.tokens.add(token);
+    deviceStore.add(token);
 
     console.log('✅ Token guardado en memoria:', token);
     console.log('📦 Total tokens:', deviceStore.tokens.size);
@@ -35,11 +35,11 @@ export const registerDevice = async (req, res) => {
 
 
 export async function obtenerDispositivosActivos() {
-    return [...deviceStore.tokens].map(token => ({ token }));
+    return deviceStore.getAll().map(token => ({ token }));
 }
 
 export function eliminarDispositivoPorToken(token) {
-    const existed = deviceStore.tokens.delete(String(token));
+    const existed = deviceStore.delete(String(token));
     if (existed) {
         console.log("Token eliminado de memoria:", token);
         console.log("Total tokens:", deviceStore.tokens.size);
@@ -48,8 +48,7 @@ export function eliminarDispositivoPorToken(token) {
 }
 
 export const clearDevices = async (_req, res) => {
-    const total = deviceStore.tokens.size;
-    deviceStore.tokens.clear();
+    const total = deviceStore.clear();
 
     return res.json({
         ok: true,
