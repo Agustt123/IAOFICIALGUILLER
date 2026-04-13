@@ -197,6 +197,7 @@ function buildUltimaAlerta(alerta = {}) {
         didNotificaciones: alerta?.did_notificaciones ?? alerta?.didNotificaciones ?? null,
         titulo: alerta?.titulo ?? "Alerta de monitoreo",
         sev: String(alerta?.sev ?? "verde"),
+        color: alerta?.color ?? alerta?.sev ?? "rojo",
         porcentajeError: alerta?.porcentaje_error ?? alerta?.porcentajeError ?? null,
         resumen: alerta?.resumen_alerta ?? alerta?.resumenAlerta ?? "Sin novedades",
         queFallo: alerta?.que_fallo ?? alerta?.queFallo ?? null,
