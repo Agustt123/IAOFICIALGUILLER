@@ -348,6 +348,7 @@ async function cargarResumenBase(dia) {
     });
     const peorPct = computeWorstPct({
         pctMax: status.pctMax,
+        diskRiskPct: status.diskRiskPct,
         maxStreak: status.maxStreak,
         satProcesosInfo,
     });

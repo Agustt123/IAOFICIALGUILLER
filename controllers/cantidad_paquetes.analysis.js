@@ -20,10 +20,21 @@ export function severityFromMetricMax(pctMax) {
     return "verde";
 }
 
-export function severityFromDiskPct(pct) {
+export function diskDangerPct(pct) {
     const v = Number(pct);
-    if (!Number.isFinite(v)) return "verde";
-    if (v >= 90) return "rojo";
+    if (!Number.isFinite(v)) return 0;
+    if (v <= 85) return 0;
+    if (v >= 100) return 100;
+    if (v <= 90) return Math.round(((v - 85) / 5) * 50);
+    if (v <= 95) return Math.round(50 + ((v - 90) / 5) * 30);
+    return Math.round(80 + ((v - 95) / 5) * 20);
+}
+
+export function severityFromDiskPct(pct) {
+    const risk = diskDangerPct(pct);
+    if (risk >= 80) return "rojo";
+    if (risk >= 50) return "naranja";
+    if (risk > 0) return "amarillo";
     return "verde";
 }
 
@@ -257,12 +268,14 @@ export function summarizeMetricas(metricas) {
     const cpu = toNum(metricas?.usoCpu);
     const ram = toNum(metricas?.usoRam);
     const disk = toNum(metricas?.usoDisco);
+    const diskRiskPct = diskDangerPct(disk);
     const vals = [cpu, ram, disk].filter((v) => v !== null);
 
     return {
         cpu,
         ram,
         disk,
+        diskRiskPct,
         pctMax: vals.length ? Math.max(...vals) : null,
     };
 }
@@ -306,7 +319,7 @@ function buildDatabaseSummary(satProcesosInfo) {
 export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
-    const { cpu, ram, disk, pctMax } = summarizeMetricas(metricas);
+    const { cpu, ram, disk, diskRiskPct, pctMax } = summarizeMetricas(metricas);
     const activeServerMetrics = activeMetricItems(cpu, ram, disk);
     const rawMetricSev = [severityFromMetricMax(cpu), severityFromMetricMax(ram), severityFromDiskPct(disk)]
         .reduce((worst, current) => pickWorstSeverity(worst, current), "verde");
@@ -368,6 +381,7 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         cpu,
         ram,
         disk,
+        diskRiskPct,
         pctMax,
         maxStreak,
         afectados,
@@ -392,12 +406,16 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     };
 }
 
-export function computeWorstPct({ pctMax, maxStreak, satProcesosInfo }) {
+export function computeWorstPct({ pctMax, diskRiskPct, maxStreak, satProcesosInfo }) {
     const candidates = [];
     const metricPct = Number(pctMax);
+    const diskRisk = Number(diskRiskPct);
 
     if (Number.isFinite(metricPct)) {
         candidates.push(Math.max(0, Math.min(99, Math.round(metricPct))));
+    }
+    if (Number.isFinite(diskRisk)) {
+        candidates.push(Math.max(0, Math.min(100, Math.round(diskRisk))));
     }
 
     const streak = Number(maxStreak) || 0;

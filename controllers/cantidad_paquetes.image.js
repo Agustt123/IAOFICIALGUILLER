@@ -68,7 +68,7 @@ function diskColorByPct(pct, highlight = false) {
     if (!Number.isFinite(v)) return "#94a3b8";
     if (v >= 95) return "#dc2626";
     if (v >= 90) return "#f97316";
-    if (v >= 50) return "#facc15";
+    if (v >= 85) return "#facc15";
     return "#cbd5e1";
 }
 
