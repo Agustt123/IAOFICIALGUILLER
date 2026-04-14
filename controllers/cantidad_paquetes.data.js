@@ -120,6 +120,7 @@ export async function obtenerCantidad(dia) {
         fecha: data.fecha ?? diaFinal,
         mes: data.mes ?? String(diaFinal).slice(0, 7),
         cantidadDia: Number(data.hoy ?? data.cantidadDia ?? data.cantidad ?? 0),
+        hoyMovimiento: Number(data.hoyMovimiento ?? data.hoy_movimiento ?? 0),
         cantidadMes: Number(data.mesCantidad ?? data.cantidadMes ?? 0),
         anioCantidad: Number(data.añoCantidad ?? data.anioCantidad ?? 0),
         mesNombre: data.nombre,

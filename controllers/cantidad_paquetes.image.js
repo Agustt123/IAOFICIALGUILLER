@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
     buildStatusSummary,
+    diskDangerPct,
     satSeverityColor,
     severityStyle,
 } from "./cantidad_paquetes.analysis.js";
@@ -40,6 +41,14 @@ function fmtPct(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return "--";
     return `${Math.round(n)}%`;
+}
+
+function formatDiskMetricLabel(pct) {
+    const raw = fmtPct(pct);
+    const risk = diskDangerPct(pct);
+    if (raw === "--") return "DISCO --";
+    if (risk <= 0) return `DISCO ${raw}`;
+    return `DISCO ${raw} (R ${risk}%)`;
 }
 
 function metricColorByPct(pct, highlight = false) {
@@ -88,6 +97,16 @@ function formatDatabaseSummaryText(summaryText) {
     return text.replace(/^PROCESOS DB\s*/i, "").trim() || "OK";
 }
 
+function formatServerSummaryForImage(status) {
+    const parts = [
+        status?.cpu !== null && status?.cpu !== undefined ? `CPU ${fmtPct(status.cpu)}` : null,
+        status?.ram !== null && status?.ram !== undefined ? `RAM ${fmtPct(status.ram)}` : null,
+        status?.disk !== null && status?.disk !== undefined ? formatDiskMetricLabel(status.disk) : null,
+    ].filter(Boolean);
+
+    return parts.length ? parts.join(" | ") : "SERVIDOR OK";
+}
+
 function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
     const status = buildStatusSummary({ monitoreo, metricas, satProcesosInfo });
     const style = severityStyle(status.sev);
@@ -111,7 +130,7 @@ function drawStatusBarTop(ctx, width, monitoreo, metricas, satProcesosInfo) {
 
     const parts = [];
     if (status.serverSev !== "verde") {
-        parts.push(status.serverSummary);
+        parts.push(formatServerSummaryForImage(status));
     }
     if (status.microservicesSev !== "verde") {
         parts.push(`MICROSERVICIOS ${status.microservicesSummary}`);
@@ -236,7 +255,7 @@ export function generarImagenResumenBuffer({
             color: metricColorByPct(metricas?.usoRam, highlightServerMetrics),
         },
         {
-            text: `DISCO ${fmtPct(metricas?.usoDisco)}`,
+            text: formatDiskMetricLabel(metricas?.usoDisco),
             color: diskColorByPct(metricas?.usoDisco, highlightServerMetrics),
         },
     ];
