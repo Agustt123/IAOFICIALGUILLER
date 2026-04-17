@@ -269,14 +269,16 @@ export function summarizeMetricas(metricas) {
     const ram = toNum(metricas?.usoRam);
     const disk = toNum(metricas?.usoDisco);
     const diskRiskPct = diskDangerPct(disk);
-    const vals = [cpu, ram, disk].filter((v) => v !== null);
+    const functionalVals = [cpu, ram, diskRiskPct].filter((v) => v !== null);
+    const rawVals = [cpu, ram, disk].filter((v) => v !== null);
 
     return {
         cpu,
         ram,
         disk,
         diskRiskPct,
-        pctMax: vals.length ? Math.max(...vals) : null,
+        pctMax: functionalVals.length ? Math.max(...functionalVals) : null,
+        rawPctMax: rawVals.length ? Math.max(...rawVals) : null,
     };
 }
 
@@ -319,7 +321,7 @@ function buildDatabaseSummary(satProcesosInfo) {
 export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
     const registros = monitoreo?.data ?? [];
     const { maxStreak, afectados } = computeConsecutiveFails(registros);
-    const { cpu, ram, disk, diskRiskPct, pctMax } = summarizeMetricas(metricas);
+    const { cpu, ram, disk, diskRiskPct, pctMax, rawPctMax } = summarizeMetricas(metricas);
     const activeServerMetrics = activeMetricItems(cpu, ram, disk);
     const rawMetricSev = [severityFromMetricMax(cpu), severityFromMetricMax(ram), severityFromDiskPct(disk)]
         .reduce((worst, current) => pickWorstSeverity(worst, current), "verde");
@@ -383,6 +385,7 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
         disk,
         diskRiskPct,
         pctMax,
+        rawPctMax,
         maxStreak,
         afectados,
         metricSev: serverSev,
@@ -409,13 +412,9 @@ export function buildStatusSummary({ monitoreo, metricas, satProcesosInfo }) {
 export function computeWorstPct({ pctMax, diskRiskPct, maxStreak, satProcesosInfo }) {
     const candidates = [];
     const metricPct = Number(pctMax);
-    const diskRisk = Number(diskRiskPct);
 
     if (Number.isFinite(metricPct)) {
-        candidates.push(Math.max(0, Math.min(99, Math.round(metricPct))));
-    }
-    if (Number.isFinite(diskRisk)) {
-        candidates.push(Math.max(0, Math.min(100, Math.round(diskRisk))));
+        candidates.push(Math.max(0, Math.min(100, Math.round(metricPct))));
     }
 
     const streak = Number(maxStreak) || 0;
