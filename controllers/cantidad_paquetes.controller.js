@@ -257,6 +257,8 @@ function buildAlertaTextoCorto(alerta = {}) {
     }
 
     return {
+        id: alerta?.id ?? null,
+        didNotificaciones: alerta?.didNotificaciones ?? null,
         fecha: formatDateTimeEs(alerta?.fecha),
         estado: "ALERTA",
         color: alerta?.color || "rojo",
