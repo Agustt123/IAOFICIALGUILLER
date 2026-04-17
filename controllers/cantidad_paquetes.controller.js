@@ -574,6 +574,7 @@ async function guardarMetricasEnvio({
             satAfectados: satProcesosInfo?.affected ?? [],
             peorPct,
             tiempoImagenMs,
+            enviada: 1,
         });
         didNotificaciones = Number(detalleResponse?.id || detalleResponse?.data?.id || 0);
         console.log(

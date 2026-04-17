@@ -49,6 +49,7 @@ export async function guardarDetalleNotificacion({
     satAfectados,
     peorPct,
     tiempoImagenMs,
+    enviada,
 } = {}) {
     const payload = {
         token: token ? String(token) : null,
@@ -71,6 +72,7 @@ export async function guardarDetalleNotificacion({
         sat_afectados: Array.isArray(satAfectados) ? satAfectados : [],
         peor_pct: Number(peorPct ?? 0),
         tiempo_imagen_ms: Number(tiempoImagenMs ?? 0),
+        enviada: Number(enviada ?? 0),
     };
 
     const { data } = await axios.post(DETALLE_ENDPOINT, payload, {
