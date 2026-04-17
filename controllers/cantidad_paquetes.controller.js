@@ -87,6 +87,17 @@ function formatDateTimeEs(value) {
     return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
 
+function shouldPersistPeriodicDetalle(now = new Date()) {
+    const minute = Number(
+        new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/Argentina/Buenos_Aires",
+            minute: "2-digit",
+        }).format(now)
+    );
+
+    return Number.isFinite(minute) && minute % 5 === 0;
+}
+
 function buildServerFocus(detail) {
     const cpu = detail?.uso_cpu ?? detail?.usoCpu ?? null;
     const ram = detail?.uso_ram ?? detail?.usoRam ?? null;
@@ -536,6 +547,7 @@ async function guardarMetricasEnvio({
     satProcesosInfo,
     peorPct,
     tiempoImagenMs,
+    enviada = 1,
 }) {
     let didNotificaciones = 0;
 
@@ -574,11 +586,11 @@ async function guardarMetricasEnvio({
             satAfectados: satProcesosInfo?.affected ?? [],
             peorPct,
             tiempoImagenMs,
-            enviada: 1,
+            enviada,
         });
         didNotificaciones = Number(detalleResponse?.id || detalleResponse?.data?.id || 0);
         console.log(
-            `Notificacion detalle guardada. did_notificaciones=${didNotificaciones} sev=${status?.sev ?? "verde"
+            `Notificacion detalle guardada. did_notificaciones=${didNotificaciones} enviada=${enviada} sev=${status?.sev ?? "verde"
             }`
         );
     } catch (detalleError) {
@@ -588,9 +600,9 @@ async function guardarMetricasEnvio({
         );
     }
 
-    if ((status?.sev ?? "verde") === "verde" || didNotificaciones <= 0) {
+    if (Number(enviada) !== 1 || (status?.sev ?? "verde") === "verde" || didNotificaciones <= 0) {
         console.log(
-            `Alerta omitida. sev=${status?.sev ?? "verde"} did_notificaciones=${didNotificaciones}`
+            `Alerta omitida. enviada=${enviada} sev=${status?.sev ?? "verde"} did_notificaciones=${didNotificaciones}`
         );
         return { didNotificaciones };
     }
@@ -640,6 +652,18 @@ async function procesarEnvioResumen({
     const lastHash = await getLastHash(token);
 
     if (lastHash && lastHash === currentHash) {
+        if (messageType === "cron" && shouldPersistPeriodicDetalle()) {
+            await guardarMetricasEnvio({
+                token,
+                imageUrl: null,
+                ...resumen,
+                status: resumen.status,
+                peorPct: resumen.peorPct,
+                tiempoImagenMs: 0,
+                enviada: 0,
+            });
+        }
+
         return {
             skipped: true,
             logicalPayload: resumen.logicalPayload,
